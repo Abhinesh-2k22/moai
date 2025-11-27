@@ -27,6 +27,14 @@ app.use('/api/groups/:groupId/expenses', require('./routes/groupExpenseRoutes'))
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 
+app.get('/ping', (req, res) => {
+    res.status(200).send('pong');
+});
+
+app.head('/ping', (req, res) => {
+    res.status(200).end();
+});
+
 app.get('/', (req, res) => {
     res.send('Money Manager API is running');
 });
