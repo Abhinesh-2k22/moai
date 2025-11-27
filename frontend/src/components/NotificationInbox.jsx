@@ -51,7 +51,7 @@ const NotificationInbox = ({ isOpen, onClose, onNotificationUpdate }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 max-h-[500px] overflow-hidden flex flex-col">
+        <div className="absolute right-0 top-full mt-2 w-72 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 max-h-[500px] overflow-hidden flex flex-col">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
                 <div className="flex items-center gap-2">
                     <Bell size={20} className="text-indigo-600" />
