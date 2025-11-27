@@ -175,7 +175,7 @@ const Dashboard = () => {
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-1"
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-2 md:px-6 md:py-3 text-sm md:text-base rounded-xl hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-1"
                 >
                     <Plus size={20} />
                     Add Transaction
