@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
-import { Filter, Calendar, TrendingUp, TrendingDown, DollarSign, Wallet, PieChart as PieIcon, Search, ArrowUp, ArrowDown, Trash2, AlertCircle, Loader } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, Sector, Treemap } from 'recharts';
+import { Filter, Calendar, TrendingUp, TrendingDown, DollarSign, Wallet, PieChart as PieIcon, Search, ArrowUp, ArrowDown, Trash2, AlertCircle, Loader, Download, Grid } from 'lucide-react';
 import { format, parseISO, subMonths, subYears, isAfter, startOfYear, getYear, getMonth, startOfMonth, endOfDay } from 'date-fns';
+import CategoryDropdown from '../components/CategoryDropdown';
 
 const Analysis = () => {
     // Data State
@@ -101,8 +102,21 @@ const Analysis = () => {
 
     const calculateTotals = () => {
         let income = 0, expense = 0, investment = 0;
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+
         transactions.forEach(tx => {
             if (tx.category === 'Debt Repayment') return;
+
+            const txDate = new Date(tx.date);
+
+            // Time Filter Logic: "Monthly" = Current Month, "Yearly" = Current Year
+            if (barFilter === 'month') {
+                if (txDate.getMonth() !== currentMonth || txDate.getFullYear() !== currentYear) return;
+            } else if (barFilter === 'year') {
+                if (txDate.getFullYear() !== currentYear) return;
+            }
 
             if (tx.type === 'income') income += tx.amount;
             else if (tx.type === 'expense') expense += tx.amount;
@@ -152,102 +166,90 @@ const Analysis = () => {
     };
 
     const processPieData = () => {
-        // Use FILTERED transactions for Sunburst
-        const hierarchy = {
-            income: {},
-            expense: {},
-            investment: {},
-            lend: {},
-            borrow: {}
+        const hierarchy = {};
+
+        // Gradient Scales (Darkest/Most Intense -> Lightest)
+        const COLOR_SCALES = {
+            'income': ['#047857', '#059669', '#10B981', '#34D399', '#6EE7B7', '#A7F3D0'], // Emeralds
+            'expense': ['#BE123C', '#E11D48', '#F43F5E', '#FB7185', '#FDA4AF', '#FECDD3'], // Roses
+            'investment': ['#B45309', '#D97706', '#F59E0B', '#FBBF24', '#FCD34D', '#FDE68A'], // Ambers
+            'lend': ['#BE185D', '#DB2777', '#EC4899', '#F472B6', '#FBCFE8', '#FCE7F3'], // Pinks
+            'borrow': ['#1D4ED8', '#2563EB', '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE'], // Blues
         };
 
         filteredTransactions.forEach(tx => {
-            if (!hierarchy[tx.type]) hierarchy[tx.type] = {};
+            if (tx.category === 'Debt Repayment') return;
 
-            // For investment, we need to handle buy/sell logic for the TOTAL, 
-            // but for the pie chart slices (categories), it's tricky.
-            // If we just sum them, Sell reduces the total. 
-            // If Net Investment is negative, we can't show it in a Pie Chart.
-            // Let's aggregate Investment as a single "Net Investment" slice if positive.
+            const typeKey = tx.type === 'investment' && tx.investmentType === 'sell' ? 'income' :
+                tx.type === 'investment' ? 'investment' : tx.type;
 
-            if (tx.type === 'investment') {
-                // We'll handle investment separately below
-            } else {
-                if (!hierarchy[tx.type][tx.category]) hierarchy[tx.type][tx.category] = 0;
-                hierarchy[tx.type][tx.category] += tx.amount;
-            }
+            if (!hierarchy[typeKey]) hierarchy[typeKey] = {};
+            if (!hierarchy[typeKey][tx.category]) hierarchy[typeKey][tx.category] = 0;
+
+            hierarchy[typeKey][tx.category] += Math.abs(tx.amount);
         });
 
-        // Calculate Net Investment
-        let netInvestment = 0;
-        filteredTransactions.forEach(tx => {
-            if (tx.type === 'investment') {
-                if (tx.investmentType === 'buy') netInvestment += tx.amount;
-                else if (tx.investmentType === 'sell') netInvestment -= tx.amount;
-            }
+        const data = Object.entries(hierarchy).map(([type, categories]) => {
+            // Sort by value DESC
+            const sortedCats = Object.entries(categories).sort((a, b) => b[1] - a[1]);
+            const scale = COLOR_SCALES[type] || ['#8884d8'];
+
+            return {
+                name: type.charAt(0).toUpperCase() + type.slice(1),
+                children: sortedCats.map(([catName, value], index) => ({
+                    name: catName,
+                    size: value,
+                    // Assign color based on rank (index). Clamp to last color if many items.
+                    fill: scale[Math.min(index, scale.length - 1)]
+                }))
+            };
         });
 
-        const fixedOrder = ['income', 'expense', 'investment', 'lend', 'borrow'];
+        setPieData(data);
+    };
 
-        const innerData = [];
-        const outerData = [];
+    // Custom Content for Treemap
+    const CustomTreemapContent = (props) => {
+        const { root, depth, x, y, width, height, index, payload, colors, rank, name } = props;
 
-        fixedOrder.forEach(typeKey => {
-            let typeTotal = 0;
-
-            if (typeKey === 'investment') {
-                typeTotal = netInvestment;
-            } else {
-                typeTotal = Object.values(hierarchy[typeKey] || {}).reduce((a, b) => a + b, 0);
-            }
-
-            if (typeTotal > 0) {
-                let name = typeKey.charAt(0).toUpperCase() + typeKey.slice(1);
-                let fill;
-                if (typeKey === 'income') fill = '#10B981';
-                else if (typeKey === 'expense') fill = '#F43F5E';
-                else if (typeKey === 'investment') fill = '#F59E0B';
-                else if (typeKey === 'lend') fill = '#EC4899'; // Pink
-                else if (typeKey === 'borrow') fill = '#3B82F6'; // Blue
-
-                innerData.push({ name, value: typeTotal, fill });
-
-                // Outer ring for categories
-                if (typeKey === 'investment') {
-                    // Just one outer slice for Investment
-                    outerData.push({
-                        name: 'Net Invested',
-                        value: typeTotal,
-                        type: name,
-                        fill: '#FCD34D'
-                    });
-                } else {
-                    const categories = hierarchy[typeKey];
-                    const sortedCats = Object.entries(categories)
-                        .map(([name, value]) => ({ name, value }))
-                        .filter(c => c.value > 0)
-                        .sort((a, b) => b.value - a.value);
-
-                    sortedCats.forEach(cat => {
-                        let catFill;
-                        if (typeKey === 'income') catFill = '#34D399';
-                        else if (typeKey === 'expense') catFill = '#FB7185';
-                        else if (typeKey === 'lend') catFill = '#FBCFE8';
-                        else if (typeKey === 'borrow') catFill = '#BFDBFE';
-                        else catFill = '#FCD34D';
-
-                        outerData.push({
-                            name: cat.name || (typeKey === 'lend' ? 'Lending' : 'Borrowing'),
-                            value: cat.value,
-                            type: name,
-                            fill: catFill
-                        });
-                    });
-                }
-            }
-        });
-
-        setPieData({ inner: innerData, outer: outerData });
+        return (
+            <g>
+                <rect
+                    x={x}
+                    y={y}
+                    width={width}
+                    height={height}
+                    style={{
+                        fill: depth < 2 ? '#8884d8' : '#ffffff00',
+                        stroke: '#fff',
+                        strokeWidth: 2 / (depth + 1e-10),
+                        strokeOpacity: 1 / (depth + 1e-10),
+                    }}
+                />
+                {depth === 1 ? (
+                    <text
+                        x={x + width / 2}
+                        y={y + height / 2 + 7}
+                        textAnchor="middle"
+                        fill="#fff"
+                        fontSize={14}
+                    >
+                        {name}
+                    </text>
+                ) : null}
+                {depth === 2 ? (
+                    <text
+                        x={x + 4}
+                        y={y + 18}
+                        fill="#fff"
+                        fontSize={16}
+                        fillOpacity={0.9}
+                    >
+                        {index + 1}
+                    </text>
+                ) : null}
+            </g>
+        );
     };
 
     const handleDelete = async (id) => {
@@ -284,6 +286,33 @@ const Analysis = () => {
         }
 
         setDateRange({ start, end });
+    };
+
+    const downloadCSV = () => {
+        if (filteredTransactions.length === 0) return;
+
+        const headers = ["Date", "Type", "Category", "Description", "Amount"];
+        const rows = filteredTransactions.map(tx => {
+            const date = format(new Date(tx.date), 'yyyy-MM-dd');
+            const amount = tx.amount.toFixed(2);
+
+            return [
+                date,
+                tx.type,
+                tx.category,
+                `"${(tx.description || '').replace(/"/g, '""')}"`, // Handle quotes in description
+                amount
+            ].join(',');
+        });
+
+        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `transactions_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const SummaryCard = ({ title, amount, color, icon: Icon }) => (
@@ -360,6 +389,9 @@ const Analysis = () => {
         );
     }
 
+    // Calculate specific recent categories for Analysis (True LRU)
+    const recentCategories = [...new Set(transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).map(t => t.category))].slice(0, 5);
+
     return (
         <div className="space-y-8 animate-fade-in pb-12">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -386,11 +418,11 @@ const Analysis = () => {
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <SummaryCard title="Total Income" amount={totals.income} color="emerald" icon={TrendingUp} />
-                <SummaryCard title="Total Expense" amount={totals.expense} color="rose" icon={TrendingDown} />
-                <SummaryCard title="Total Investment" amount={totals.investment} color="amber" icon={DollarSign} />
+                <SummaryCard title={`Total Income (${barFilter === 'month' ? 'Month' : 'Year'})`} amount={totals.income} color="emerald" icon={TrendingUp} />
+                <SummaryCard title={`Total Expense (${barFilter === 'month' ? 'Month' : 'Year'})`} amount={totals.expense} color="rose" icon={TrendingDown} />
+                <SummaryCard title={`Total Investment (${barFilter === 'month' ? 'Month' : 'Year'})`} amount={totals.investment} color="amber" icon={DollarSign} />
                 <SummaryCard
-                    title="Net Balance"
+                    title={`Net Balance (${barFilter === 'month' ? 'Month' : 'Year'})`}
                     amount={totals.income - totals.expense - totals.investment}
                     color="indigo"
                     icon={Wallet}
@@ -404,15 +436,27 @@ const Analysis = () => {
 
             {/* HISTORY SECTION (Filters & Table) */}
             <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                    <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600">
-                        <Filter size={24} />
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600">
+                            <Filter size={24} />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-800">Detailed Transaction History</h2>
                     </div>
-                    <h2 className="text-xl font-bold text-gray-800">Detailed Transaction History</h2>
+                    {filteredTransactions.length > 0 && (
+                        <button
+                            onClick={downloadCSV}
+                            className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors font-semibold"
+                            title="Download filtered transactions as CSV"
+                        >
+                            <Download size={18} />
+                            <span className="hidden sm:inline">Download CSV</span>
+                        </button>
+                    )}
                 </div>
 
                 {/* Filters */}
-                <div className="glass-card p-6 rounded-2xl space-y-4">
+                <div className="glass-card p-6 rounded-2xl space-y-4 relative z-20">
                     <div className="flex flex-col md:flex-row gap-4">
                         <div className="flex-1 relative">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -424,9 +468,9 @@ const Analysis = () => {
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
-                        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
+                        <div className="flex flex-wrap gap-2">
                             <select
-                                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all min-w-[140px]"
+                                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all min-w-[160px]"
                                 value={typeFilter}
                                 onChange={(e) => setTypeFilter(e.target.value)}
                             >
@@ -437,19 +481,18 @@ const Analysis = () => {
                                 <option value="lend">Lend</option>
                                 <option value="borrow">Borrow</option>
                             </select>
-                            <select
-                                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all min-w-[160px]"
-                                value={categoryFilter}
-                                onChange={(e) => setCategoryFilter(e.target.value)}
-                            >
-                                <option value="all">All Categories</option>
-                                {categories
-                                    .filter(c => typeFilter === 'all' || c.type === typeFilter)
-                                    .map(c => (
-                                        <option key={c._id} value={c.name}>{c.name}</option>
-                                    ))
-                                }
-                            </select>
+                            <div className="relative z-50 min-w-[300px]">
+                                <CategoryDropdown
+                                    categories={categories.filter(c => typeFilter === 'all' || c.type === typeFilter)}
+                                    value={categoryFilter}
+                                    onChange={setCategoryFilter}
+                                    type={typeFilter}
+                                    recents={recentCategories} // Pass True LRU
+                                    placeholder="All Categories"
+                                    showAllOption={true}
+                                    allowFavoriteToggle={false}
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -611,77 +654,114 @@ const Analysis = () => {
                 </div>
             </div>
 
-            {/* Sunburst Chart */}
+            {/* Treemap Chart */}
             <div className="glass-card p-8 rounded-2xl">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
                     <div className="flex items-center gap-3">
                         <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600">
-                            <PieIcon size={24} />
+                            <Grid size={24} />
                         </div>
                         <h2 className="text-xl font-bold text-gray-800">Category Distribution (Filtered)</h2>
                     </div>
-                    {/* Removed independent pie filters as it now uses the main filters */}
                 </div>
 
                 <div className="h-96 w-full flex justify-center">
-                    {pieData.inner && pieData.inner.length > 0 ? (
+                    {pieData && pieData.length > 0 ? (
                         <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
+                            <Treemap
+                                width={400}
+                                height={200}
+                                data={pieData}
+                                dataKey="size"
+                                aspectRatio={4 / 3}
+                                stroke="#fff"
+                                fill="#8884d8"
+                                content={<CustomizedContent />}
+                            >
                                 <Tooltip
-                                    formatter={(value, name, props) => [
-                                        `₹${value.toFixed(2)}`,
-                                        props.payload.type ? `${props.payload.type} - ${name}` : name
-                                    ]}
-                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                    formatter={(value, name) => [`₹${value.toFixed(2)}`, name]}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                 />
-                                {/* Inner Pie: Types */}
-                                <Pie
-                                    data={pieData.inner}
-                                    dataKey="value"
-                                    cx="50%"
-                                    cy="50%"
-                                    outerRadius={80}
-                                    fill="#8884d8"
-                                    startAngle={90}
-                                    endAngle={-270}
-                                    isAnimationActive={false}
-                                >
-                                    {pieData.inner.map((entry, index) => (
-                                        <Cell key={`cell-inner-${index}`} fill={entry.fill} stroke="white" strokeWidth={2} />
-                                    ))}
-                                </Pie>
-                                {/* Outer Pie: Categories */}
-                                <Pie
-                                    data={pieData.outer}
-                                    dataKey="value"
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={90}
-                                    outerRadius={130}
-                                    fill="#82ca9d"
-                                    startAngle={90}
-                                    endAngle={-270}
-                                    isAnimationActive={false}
-                                    label={({ name, percent }) => percent > 0.05 ? name : ''}
-                                >
-                                    {pieData.outer.map((entry, index) => (
-                                        <Cell key={`cell-outer-${index}`} fill={entry.fill} stroke="white" strokeWidth={1} />
-                                    ))}
-                                </Pie>
-                            </PieChart>
+                            </Treemap>
                         </ResponsiveContainer>
                     ) : (
                         <div className="h-full flex flex-col items-center justify-center text-gray-400">
-                            <PieIcon size={48} className="mb-4 opacity-20" />
+                            <Grid size={48} className="mb-4 opacity-20" />
                             <p>No data matches the current filters</p>
                         </div>
                     )}
                 </div>
                 <div className="mt-4 text-center text-sm text-gray-500">
-                    Inner Circle: Type (Income/Expense/Investment) | Outer Circle: Categories
+                    Size represents transaction amount. Grouped by Type.
                 </div>
             </div>
         </div>
+    );
+};
+
+// Treemap Custom Content Component
+const CustomizedContent = (props) => {
+    const { depth, x, y, width, height, index, name, value, root } = props;
+
+    return (
+        <g>
+            {depth === 1 ? (
+                // Top Level Group (Type) - Transparent container
+                <g></g>
+            ) : (
+                // Leaf Node (Category)
+                <g>
+                    <rect
+                        x={x}
+                        y={y}
+                        width={width}
+                        height={height}
+                        style={{
+                            fill: props.fill || '#6366F1', // Use fill passed from data
+                            fillOpacity: 1,
+                            stroke: '#fff',
+                            strokeWidth: 2,
+                            // Add subtle transition for hover effects
+                            transition: 'all 0.3s'
+                        }}
+                        rx={6}
+                        ry={6}
+                    />
+                    {/* Text Logic: Show only if box is big enough */}
+                    {width > 36 && height > 20 && (
+                        <text
+                            x={x + width / 2}
+                            // Shift up if showing price, otherwise center
+                            y={y + height / 2 - (height > 50 && width > 60 ? 8 : 0)}
+                            textAnchor="middle"
+                            fill="#fff"
+                            // Responsive font size
+                            fontSize={Math.max(10, Math.min(width / (name.length * 0.75), 16))}
+                            fontWeight="700"
+                            dominantBaseline="central"
+                            style={{ textShadow: '0 1px 2px rgba(0,0,0,0.3)', pointerEvents: 'none' }}
+                        >
+                            {name}
+                        </text>
+                    )}
+                    {/* Price Logic: Show only if box is quite large */}
+                    {width > 60 && height > 50 && (
+                        <text
+                            x={x + width / 2}
+                            y={y + height / 2 + 12}
+                            textAnchor="middle"
+                            fill="#ffffff"
+                            fillOpacity={0.95}
+                            fontSize={11}
+                            fontWeight="500"
+                            style={{ textShadow: '0 1px 2px rgba(0,0,0,0.3)', pointerEvents: 'none' }}
+                        >
+                            ₹{value.toLocaleString()}
+                        </text>
+                    )}
+                </g>
+            )}
+        </g>
     );
 };
 

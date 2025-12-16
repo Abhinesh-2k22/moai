@@ -2,8 +2,9 @@ import React, { useState, useEffect, useContext } from 'react';
 import api from '../api/axios';
 import { X, Check } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
+import CategoryDropdown from './CategoryDropdown';
 
-const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded }) => {
+const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCategories = [] }) => {
     const { user } = useContext(AuthContext);
     const [amount, setAmount] = useState('');
     const [type, setType] = useState('expense');
@@ -16,6 +17,7 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded }) => {
     });
 
 
+
     const [categories, setCategories] = useState([]);
     const [newCategory, setNewCategory] = useState('');
     const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -26,7 +28,7 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded }) => {
     const [dummyUsers, setDummyUsers] = useState([]);
     const [recipientInput, setRecipientInput] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const [selectedRecipient, setSelectedRecipient] = useState(null); // { id, name, type: 'user'|'dummy' }
+    const [selectedRecipient, setSelectedRecipient] = useState(null); // {id, name, type: 'user'|'dummy' }
 
     useEffect(() => {
         if (isOpen) {
@@ -351,21 +353,17 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded }) => {
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Category</label>
                             {!isAddingCategory ? (
                                 <div className="flex gap-2">
-                                    <select
-                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all appearance-none"
+                                    <CategoryDropdown
+                                        categories={filteredCategories}
                                         value={category}
-                                        onChange={(e) => setCategory(e.target.value)}
-                                        required
-                                    >
-                                        <option value="">Select Category</option>
-                                        {filteredCategories.map(c => (
-                                            <option key={c._id} value={c.name}>{c.name}</option>
-                                        ))}
-                                    </select>
+                                        onChange={setCategory}
+                                        type={type}
+                                        recents={recentCategories}
+                                    />
                                     <button
                                         type="button"
                                         onClick={() => setIsAddingCategory(true)}
-                                        className="px-4 bg-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-200 transition-colors font-bold text-xl"
+                                        className="px-4 bg-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-200 transition-colors font-bold text-xl flex-shrink-0"
                                     >
                                         +
                                     </button>

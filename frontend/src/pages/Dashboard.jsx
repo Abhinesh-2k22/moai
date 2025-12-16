@@ -166,6 +166,9 @@ const Dashboard = () => {
 
     const balance = calculateLifetimeBalance();
 
+    // Calculate recent categories for modal
+    const recentCategories = [...new Set(transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).map(t => t.category))].slice(0, 5);
+
     return (
         <div className="space-y-8 animate-fade-in">
             <div className="flex justify-between items-center">
@@ -351,6 +354,7 @@ const Dashboard = () => {
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 onTransactionAdded={fetchData}
+                recentCategories={[...new Set(transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).map(t => t.category))].slice(0, 5)}
             />
         </div>
     );
