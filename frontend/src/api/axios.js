@@ -22,4 +22,20 @@ api.interceptors.request.use(
     }
 );
 
+// Add a response interceptor to handle 401 errors
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response && error.response.status === 401) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            // Redirect to login if not already there
+            if (!window.location.pathname.includes('/login')) {
+                window.location.href = '/login';
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
 export default api;
