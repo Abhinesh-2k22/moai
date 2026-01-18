@@ -197,7 +197,7 @@ const GroupDetail = () => {
                                                     <div
                                                         key={user._id}
                                                         className="px-4 py-3 hover:bg-indigo-50 cursor-pointer transition-colors border-b border-gray-50 last:border-0"
-                                                        onClick={() => {
+                                                        onMouseDown={() => {
                                                             setNewMemberEmail(user.email);
                                                             setShowDropdown(false);
                                                         }}

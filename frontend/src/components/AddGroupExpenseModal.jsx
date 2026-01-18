@@ -7,6 +7,7 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded }) => {
     const [amount, setAmount] = useState('');
     const [payerId, setPayerId] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [time, setTime] = useState(new Date().toTimeString().slice(0, 5));
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
