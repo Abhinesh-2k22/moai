@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { AuthContext } from '../context/AuthContext';
 import AddGroupExpenseModal from '../components/AddGroupExpenseModal';
-import { Plus, UserPlus, CheckCircle, Clock, ArrowUpRight, ArrowDownLeft, Wallet, X } from 'lucide-react';
+import { Plus, UserPlus, CheckCircle, Clock, ArrowUpRight, ArrowDownLeft, Wallet, X, Pencil, Trash2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 const GroupDetail = () => {
@@ -13,6 +13,7 @@ const GroupDetail = () => {
     const [expenses, setExpenses] = useState([]);
     const [balances, setBalances] = useState([]);
     const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+    const [editingExpense, setEditingExpense] = useState(null);
 
     // Member Addition State
     const [isAddingMember, setIsAddingMember] = useState(false);
@@ -92,6 +93,27 @@ const GroupDetail = () => {
         }
     };
 
+    const handleEditExpense = (expense) => {
+        setEditingExpense(expense);
+        setIsExpenseModalOpen(true);
+    };
+
+    const handleDeleteExpense = async (expenseId) => {
+        if (!window.confirm('Are you sure you want to delete this expense?')) return;
+        try {
+            await api.delete(`/groups/${id}/expenses/${expenseId}`);
+            fetchGroupData();
+        } catch (err) {
+            console.error(err);
+            alert('Failed to delete expense');
+        }
+    };
+
+    const handleCloseModal = () => {
+        setIsExpenseModalOpen(false);
+        setEditingExpense(null);
+    };
+
     if (!group) return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
     const isOwner = group.createdBy === user.id;
@@ -143,7 +165,7 @@ const GroupDetail = () => {
                             </button>
                         )}
                         <button
-                            onClick={() => setIsExpenseModalOpen(true)}
+                            onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }}
                             className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl hover:bg-indigo-700 transition-all font-medium shadow-lg hover:shadow-indigo-500/30"
                         >
                             <Plus size={18} />
@@ -336,8 +358,24 @@ const GroupDetail = () => {
                     </div>
                     <div className="space-y-3">
                         {expenses.map((exp) => (
-                            <div key={exp._id} className="glass-card p-5 rounded-xl hover:shadow-md transition-all group border border-gray-100">
-                                <div className="flex items-center justify-between">
+                            <div key={exp._id} className="glass-card p-5 rounded-xl hover:shadow-md transition-all group border border-gray-100 relative">
+                                <div className="absolute top-4 right-4 flex gap-2">
+                                    <button
+                                        onClick={() => handleEditExpense(exp)}
+                                        className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
+                                        title="Edit Expense"
+                                    >
+                                        <Pencil size={16} />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteExpense(exp._id)}
+                                        className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors"
+                                        title="Delete Expense"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
+                                <div className="flex items-center justify-between pr-20">
                                     <div className="flex items-center gap-4">
                                         <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
                                             <Clock size={20} />
@@ -402,9 +440,10 @@ const GroupDetail = () => {
 
             <AddGroupExpenseModal
                 isOpen={isExpenseModalOpen}
-                onClose={() => setIsExpenseModalOpen(false)}
+                onClose={handleCloseModal}
                 group={group}
                 onExpenseAdded={fetchGroupData}
+                expenseToEdit={editingExpense}
             />
         </div>
     );

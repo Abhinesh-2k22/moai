@@ -4,7 +4,7 @@ const Settlement = require('../models/Settlement');
 
 // Add Group Expense
 exports.addExpense = async (req, res) => {
-    const { description, amount, splits, payerGuestName } = req.body; // splits: [{ userId, guestName, amount }]
+    const { description, amount, splits, payerId, payerGuestName, date } = req.body; // splits: [{ userId, guestName, amount }]
     const groupId = req.params.groupId;
 
     try {
@@ -18,14 +18,33 @@ exports.addExpense = async (req, res) => {
             return res.status(401).json({ msg: 'Not authorized' });
         }
 
+        // Determine Payer
+        let finalPayerId = undefined;
+        let finalPayerGuestName = undefined;
+
+        if (payerId) {
+            if (payerId.startsWith('guest:')) {
+                finalPayerGuestName = payerId.split(':')[1];
+            } else {
+                finalPayerId = payerId;
+            }
+        } else if (payerGuestName) {
+            finalPayerGuestName = payerGuestName;
+        } else {
+            // Default to current user
+            finalPayerId = req.user.id;
+        }
+
         const newExpense = new GroupExpense({
             groupId,
-            payerId: req.user.id, // Assuming logged in user pays, or we can allow specifying payer
-            payerGuestName, // If payer is a guest (advanced case, usually user pays)
+            payerId: finalPayerId,
+            payerGuestName: finalPayerGuestName,
             amount,
             description,
+            date,
             splits
         });
+
 
         await newExpense.save();
         res.json(newExpense);
@@ -107,6 +126,79 @@ exports.getBalances = async (req, res) => {
         }
 
         res.json(formattedBalances);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+};
+// Update Group Expense
+exports.updateExpense = async (req, res) => {
+    const { description, amount, splits, payerId, payerGuestName, date } = req.body;
+    const expenseId = req.params.expenseId;
+
+    try {
+        const expense = await GroupExpense.findById(expenseId);
+        if (!expense) {
+            return res.status(404).json({ msg: 'Expense not found' });
+        }
+
+        const group = await Group.findById(expense.groupId);
+        if (!group) {
+            return res.status(404).json({ msg: 'Group not found' });
+        }
+
+        // Verify membership
+        if (!group.members.some(m => m.userId && m.userId.toString() === req.user.id)) {
+            return res.status(401).json({ msg: 'Not authorized' });
+        }
+
+        // Update fields
+        expense.description = description;
+        expense.amount = amount;
+        expense.splits = splits;
+        expense.date = date;
+
+        // Update Payer Logic
+        if (payerId) {
+            if (payerId.startsWith('guest:')) {
+                expense.payerGuestName = payerId.split(':')[1];
+                expense.payerId = undefined;
+            } else {
+                expense.payerId = payerId;
+                expense.payerGuestName = undefined;
+            }
+        } else if (payerGuestName) {
+            expense.payerGuestName = payerGuestName;
+            expense.payerId = undefined;
+        }
+
+        await expense.save();
+        res.json(expense);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+};
+
+// Delete Group Expense
+exports.deleteExpense = async (req, res) => {
+    const expenseId = req.params.expenseId;
+
+    try {
+        const expense = await GroupExpense.findById(expenseId);
+        if (!expense) {
+            return res.status(404).json({ msg: 'Expense not found' });
+        }
+
+        const group = await Group.findById(expense.groupId);
+        // Verify membership (anyone in group can delete? or only creator? 
+        // For simplicity in a shared group, usually anyone can delete is fine, or maybe check if user is in the group)
+        if (group && !group.members.some(m => m.userId && m.userId.toString() === req.user.id)) {
+            return res.status(401).json({ msg: 'Not authorized' });
+        }
+
+        await expense.deleteOne();
+        res.json({ msg: 'Expense removed' });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server error');

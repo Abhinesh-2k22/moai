@@ -29,10 +29,11 @@ const Dashboard = () => {
             const allTransactions = res.data;
             setTransactions(allTransactions);
 
-            const resSettlements = await api.get('/settlements/history');
-            setSettlements(resSettlements.data);
+            const resSettlements = await api.get('/settlements'); // Fetch verified balances
+            const settlementsData = resSettlements.data;
+            setSettlements(settlementsData); // Store full settlement data if needed, or just balances
 
-            // Calculate totals for CURRENT MONTH only (for Income/Expense)
+            // Calculate totals for CURRENT MONTH only
             const now = new Date();
             const currentMonthTransactions = allTransactions.filter(tx => {
                 const txDate = new Date(tx.date);
@@ -44,15 +45,8 @@ const Dashboard = () => {
             let investmentBuy = 0;
             let investmentSell = 0;
 
-            // For Income/Expense, use Current Month, but EXCLUDE Debt Repayment if desired (or keep it if it's cash flow)
-            // User said: "lending/borrowing should only alter balance and not income or expense"
-            // This implies Debt Repayment (which is the result of settlement) might also be excluded?
-            // Or maybe just the initial Lend/Borrow.
-            // Initial Lend/Borrow are already excluded from Income/Expense below.
-            // Let's exclude 'Debt Repayment' category from Income/Expense totals to be safe as per user request.
-
             currentMonthTransactions.forEach(tx => {
-                if (tx.category === 'Debt Repayment') return; // Skip debt repayments for Income/Expense cards
+                if (tx.category === 'Debt Repayment') return;
 
                 if (tx.type === 'income') income += tx.amount;
                 else if (tx.type === 'expense') expense += tx.amount;
@@ -62,14 +56,18 @@ const Dashboard = () => {
                 }
             });
 
-            // Calculate To Settle (Borrow) and To Expect (Lend) from ALL UNSETTLED transactions (Lifetime)
+            // Calculate To Settle (Borrow) and To Expect (Lend) from SETTLEMENTS API
+            // This includes both Group debts and Personal debts
             let lend = 0;
             let borrow = 0;
 
-            allTransactions.forEach(tx => {
-                if (!tx.isSettled && tx.status === 'confirmed') {
-                    if (tx.type === 'lend') lend += tx.amount;
-                    else if (tx.type === 'borrow') borrow += tx.amount;
+            settlementsData.forEach(balance => {
+                if (balance.total > 0) {
+                    // Positive balance means I am owed money (To Expect / Lend)
+                    lend += balance.total;
+                } else if (balance.total < 0) {
+                    // Negative balance means I owe money (To Settle / Borrow)
+                    borrow += Math.abs(balance.total);
                 }
             });
 

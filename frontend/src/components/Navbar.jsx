@@ -1,32 +1,12 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { LogOut, PieChart, Users, Home, Wallet, Scale, Bell } from 'lucide-react';
-import NotificationInbox from './NotificationInbox';
-import api from '../api/axios';
+import { LogOut, PieChart, Users, Home, Scale, StickyNote, Wallet } from 'lucide-react';
 
 const Navbar = () => {
     const { user, logout } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
-    const [isInboxOpen, setIsInboxOpen] = useState(false);
-    const [notificationCount, setNotificationCount] = useState(0);
-
-    useEffect(() => {
-        fetchNotificationCount();
-        // Poll every 30 seconds
-        const interval = setInterval(fetchNotificationCount, 30000);
-        return () => clearInterval(interval);
-    }, []);
-
-    const fetchNotificationCount = async () => {
-        try {
-            const res = await api.get('/notifications');
-            setNotificationCount(res.data.length);
-        } catch (err) {
-            console.error(err);
-        }
-    };
 
     const handleLogout = () => {
         logout();
@@ -48,7 +28,7 @@ const Navbar = () => {
                         </span>
                     </Link>
 
-                    <div className="flex items-center gap-1 md:gap-6 bg-white/50 px-2 md:px-6 py-1.5 md:py-2 rounded-full border border-white/50 shadow-sm backdrop-blur-md">
+                    <div className="flex items-center gap-1 md:gap-6 bg-white/50 px-2 md:px-6 py-1.5 md:py-2 rounded-full border border-white/50 shadow-sm backdrop-blur-md overflow-x-auto hide-scrollbar">
                         <Link
                             to="/"
                             className={`flex items-center gap-2 px-1.5 md:px-3 py-1.5 md:py-2 rounded-lg transition-all duration-300 ${isActive('/') ? 'bg-indigo-50 text-indigo-600 font-medium' : 'text-gray-500 hover:text-indigo-600 hover:bg-gray-50'}`}
@@ -77,30 +57,16 @@ const Navbar = () => {
                             <Scale size={18} />
                             <span className="hidden md:inline">Settlements</span>
                         </Link>
+                        <Link
+                            to="/notes"
+                            className={`flex items-center gap-2 px-1.5 md:px-3 py-1.5 md:py-2 rounded-lg transition-all duration-300 ${isActive('/notes') ? 'bg-indigo-50 text-indigo-600 font-medium' : 'text-gray-500 hover:text-indigo-600 hover:bg-gray-50'}`}
+                        >
+                            <StickyNote size={18} />
+                            <span className="hidden md:inline">Notes</span>
+                        </Link>
                     </div>
 
                     <div className="flex items-center gap-2 md:gap-4">
-                        {/* Notification Bell */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setIsInboxOpen(!isInboxOpen)}
-                                className="p-1.5 md:p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all duration-300 relative"
-                                title="Notifications"
-                            >
-                                <Bell size={20} />
-                                {notificationCount > 0 && (
-                                    <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-xs font-bold rounded-full h-4 w-4 md:h-5 md:w-5 flex items-center justify-center animate-pulse">
-                                        {notificationCount}
-                                    </span>
-                                )}
-                            </button>
-                            <NotificationInbox
-                                isOpen={isInboxOpen}
-                                onClose={() => setIsInboxOpen(false)}
-                                onNotificationUpdate={fetchNotificationCount}
-                            />
-                        </div>
-
                         <div className="hidden md:flex flex-col items-end">
                             <span className="text-sm font-semibold text-gray-700">{user?.name}</span>
                             <span className="text-xs text-gray-500">{user?.email}</span>

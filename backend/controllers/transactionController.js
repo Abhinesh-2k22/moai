@@ -1,11 +1,42 @@
 const Transaction = require('../models/Transaction');
+const GroupExpense = require('../models/GroupExpense');
 const mongoose = require('mongoose');
 
 // Get all transactions for user
 exports.getTransactions = async (req, res) => {
     try {
-        const transactions = await Transaction.find({ userId: req.user.id }).sort({ date: -1 });
-        res.json(transactions);
+        // 1. Fetch Personal Transactions
+        const transactions = await Transaction.find({ userId: req.user.id }).lean();
+
+        // 2. Fetch Group Expenses where user is involved
+        const groupExpenses = await GroupExpense.find({ 'splits.userId': req.user.id })
+            .populate('groupId', 'name')
+            .populate('payerId', 'name')
+            .lean();
+
+        // 3. Transform Group Expenses into Transaction-like objects
+        const groupTxns = groupExpenses.map(ge => {
+            const mySplit = ge.splits.find(s => s.userId && s.userId.toString() === req.user.id);
+            const amount = mySplit ? mySplit.amount : 0;
+            const groupName = ge.groupId ? ge.groupId.name : 'Unknown Group';
+
+            return {
+                _id: ge._id, // Use GE ID
+                userId: req.user.id,
+                amount: amount,
+                type: 'expense',
+                category: 'Group Expense',
+                description: `${ge.description} (Group: ${groupName})`,
+                date: ge.date,
+                isGroupExpense: true,
+                payerName: ge.payerId ? ge.payerId.name : ge.payerGuestName
+            };
+        });
+
+        // 4. Merge and Sort
+        const allTransactions = [...transactions, ...groupTxns].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        res.json(allTransactions);
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server error');
@@ -14,80 +45,45 @@ exports.getTransactions = async (req, res) => {
 
 // Add new transaction
 exports.addTransaction = async (req, res) => {
-    const { amount, type, category, description, date, investmentType, recipientUserId, recipientDummyId } = req.body;
+    const { amount, type, category, description, date, investmentType, recipientUserId } = req.body;
 
     try {
         // Handle lend/borrow transactions
         if (type === 'lend' || type === 'borrow') {
-            const Notification = require('../models/Notification');
-            const DummyUser = require('../models/DummyUser');
+            const txData = {
+                userId: req.user.id,
+                amount,
+                type,
+                description,
+                date,
+                status: 'confirmed',
+                recipientUserId
+            };
 
-            // Check if recipient is a dummy user
-            const isDummyUser = !!recipientDummyId;
+            const newTransaction = new Transaction(txData);
+            const transaction = await newTransaction.save();
 
-            if (isDummyUser) {
-                // AUTO-CONFIRM for dummy users
-                const newTransaction = new Transaction({
-                    userId: req.user.id,
-                    amount,
-                    type,
-                    description,
-                    date,
-                    recipientDummyId,
-                    status: 'confirmed'
-                });
+            // Create reciprocal transaction
+            const reciprocalType = type === 'lend' ? 'borrow' : 'lend';
+            const reciprocalTxData = {
+                userId: recipientUserId,
+                amount,
+                type: reciprocalType,
+                description,
+                date,
+                status: 'confirmed',
+                linkedTransactionId: transaction._id,
+                recipientUserId: req.user.id
+            };
 
-                const transaction = await newTransaction.save();
+            const reciprocalTx = new Transaction(reciprocalTxData);
+            await reciprocalTx.save();
 
-                // Immediately create reciprocal transaction for dummy user
-                const reciprocalType = type === 'lend' ? 'borrow' : 'lend';
-                const reciprocalTx = new Transaction({
-                    userId: req.user.id, // Dummy transactions still belong to the creator
-                    amount,
-                    type: reciprocalType,
-                    description,
-                    date,
-                    recipientDummyId,
-                    status: 'confirmed',
-                    linkedTransactionId: transaction._id
-                });
+            // Link back
+            transaction.linkedTransactionId = reciprocalTx._id;
+            await transaction.save();
 
-                await reciprocalTx.save();
-
-                // Link back
-                transaction.linkedTransactionId = reciprocalTx._id;
-                await transaction.save();
-
-                return res.json(transaction);
-            } else {
-                // PENDING for real users - requires confirmation
-                const newTransaction = new Transaction({
-                    userId: req.user.id,
-                    amount,
-                    type,
-                    description,
-                    date,
-                    recipientUserId,
-                    status: 'pending'
-                });
-
-                const transaction = await newTransaction.save();
-
-                // Create notification for recipient
-                const notification = new Notification({
-                    userId: recipientUserId,
-                    type: type === 'lend' ? 'lend_request' : 'borrow_request',
-                    transactionId: transaction._id,
-                    fromUserId: req.user.id,
-                    amount,
-                    description,
-                    status: 'pending'
-                });
-
-                await notification.save();
-
-                return res.json(transaction);
-            }
+            return res.json(transaction);
         }
 
         // Regular transactions (income, expense, investment)
@@ -103,6 +99,39 @@ exports.addTransaction = async (req, res) => {
 
         const transaction = await newTransaction.save();
         res.json(transaction);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+};
+
+// Settle Transaction (Mark as Settled)
+exports.settleTransaction = async (req, res) => {
+    try {
+        const transaction = await Transaction.findById(req.params.id);
+
+        if (!transaction) {
+            return res.status(404).json({ msg: 'Transaction not found' });
+        }
+
+        if (transaction.userId.toString() !== req.user.id) {
+            return res.status(401).json({ msg: 'Not authorized' });
+        }
+
+        // Mark as settled
+        transaction.isSettled = true;
+        await transaction.save();
+
+        // Mark linked transaction as settled if exists
+        if (transaction.linkedTransactionId) {
+            const linkedTx = await Transaction.findById(transaction.linkedTransactionId);
+            if (linkedTx) {
+                linkedTx.isSettled = true;
+                await linkedTx.save();
+            }
+        }
+
+        res.json({ msg: 'Transaction settled', transaction });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server error');

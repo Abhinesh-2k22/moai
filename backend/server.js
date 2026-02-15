@@ -23,9 +23,9 @@ app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.use('/api/categories', require('./routes/categoryRoutes'));
 app.use('/api/groups', require('./routes/groupRoutes'));
 app.use('/api/settlements', require('./routes/settlementRoutes'));
-app.use('/api/groups/:groupId/expenses', require('./routes/groupExpenseRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/notes', require('./routes/noteRoutes'));
 
 app.get('/ping', (req, res) => {
     res.status(200).send('pong');
@@ -37,6 +37,15 @@ app.head('/ping', (req, res) => {
 
 app.get('/', (req, res) => {
     res.send('Money Manager API is running');
+});
+
+// Debug Route to check DB Connection
+app.get('/api/debug/config', (req, res) => {
+    res.json({
+        mongoUri: process.env.MONGO_URI ? process.env.MONGO_URI.split('@')[1] : 'Not Set', // Hide credentials
+        dbName: mongoose.connection.name,
+        host: mongoose.connection.host
+    });
 });
 
 app.listen(PORT, () => {

@@ -8,6 +8,7 @@ import Analysis from './pages/Analysis';
 import Groups from './pages/Groups';
 import GroupDetail from './pages/GroupDetail';
 import Settlements from './pages/Settlements';
+import Notes from './pages/Notes';
 
 import Navbar from './components/Navbar';
 
@@ -39,6 +40,8 @@ const App = () => { // Changed from function App() to const App = () =>
                       <Route path="/groups/:id" element={<GroupDetail />} />
                       <Route path="/analysis" element={<Analysis />} />
                       <Route path="/settlements" element={<Settlements />} />
+                      <Route path="/notes" element={<Notes />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
 
                     </Routes>
                   </div>
