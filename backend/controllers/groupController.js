@@ -179,112 +179,12 @@ exports.addGroupExpense = async (req, res) => {
             // AND Payer is ALSO a Registered User (otherwise we can't create Lend tx for payer)
 
             if (payerId && memberId !== payerId) {
-                // Payer LENDS to Member (or Member repays Payer if reverse debt exists)
-
-                // 1. Check for REVERSE debt (Member -> Payer)
-                // Does Payer owe Member? If so, reduce that debt first.
-                let reverseLendTx = await Transaction.findOne({
-                    userId: memberId, // Member lent to Payer
-                    recipientUserId: payerId,
-                    type: 'lend',
-                    isSettled: false
-                });
-
-                let reverseBorrowTx = await Transaction.findOne({
-                    userId: payerId, // Payer borrowed from Member
-                    recipientUserId: memberId,
-                    type: 'borrow',
-                    isSettled: false
-                });
-
-                let remainingAmount = splitAmount;
-
-                if (reverseLendTx && reverseBorrowTx) {
-                    if (reverseLendTx.amount > remainingAmount) {
-                        // Debt covers the new expense. Reduce debt.
-                        reverseLendTx.amount -= remainingAmount;
-                        reverseBorrowTx.amount -= remainingAmount;
-                        await reverseLendTx.save();
-                        await reverseBorrowTx.save();
-                        remainingAmount = 0;
-                    } else {
-                        // New expense covers debt. Settle debt and create new tx for remainder.
-                        remainingAmount -= reverseLendTx.amount;
-
-                        reverseLendTx.amount = 0; // Or keep record? Better to mark settled.
-                        reverseLendTx.isSettled = true;
-                        reverseLendTx.settlementStatus = 'confirmed';
-
-                        reverseBorrowTx.amount = 0;
-                        reverseBorrowTx.isSettled = true;
-                        reverseBorrowTx.settlementStatus = 'confirmed';
-
-                        await reverseLendTx.save();
-                        await reverseBorrowTx.save();
-                    }
-                }
-
-                // 2. If remaining amount exists, create new Forward debt (Payer -> Member)
-                if (remainingAmount > 0.01) {
-                    // Check for existing UNSETTLED Lend transaction
-                    let lendTx = await Transaction.findOne({
-                        userId: payerId,
-                        recipientUserId: memberId,
-                        type: 'lend',
-                        isSettled: false
-                    });
-
-                    if (lendTx) {
-                        lendTx.amount += remainingAmount;
-                        await lendTx.save();
-                    } else {
-                        lendTx = new Transaction({
-                            userId: payerId,
-                            recipientUserId: memberId,
-                            amount: remainingAmount,
-                            type: 'lend',
-                            description: `Owed by ${member.userId.name}`,
-                            status: 'confirmed',
-                            isSettled: false,
-                            date: expenseDate
-                        });
-                        await lendTx.save();
-                    }
-
-                    // Member BORROWS from Payer
-                    // Check for existing UNSETTLED Borrow transaction
-                    let borrowTx = await Transaction.findOne({
-                        userId: memberId,
-                        recipientUserId: payerId,
-                        type: 'borrow',
-                        isSettled: false
-                    });
-
-                    if (borrowTx) {
-                        borrowTx.amount += remainingAmount;
-                        await borrowTx.save();
-                    } else {
-                        borrowTx = new Transaction({
-                            userId: memberId,
-                            recipientUserId: payerId,
-                            amount: remainingAmount,
-                            type: 'borrow',
-                            description: `Owed to ${payer.userId.name}`,
-                            status: 'confirmed',
-                            isSettled: false,
-                            date: expenseDate
-                        });
-                        await borrowTx.save();
-                    }
-
-                    // Link transactions if newly created (or ensure link exists)
-                    if (!lendTx.linkedTransactionId || !borrowTx.linkedTransactionId) {
-                        lendTx.linkedTransactionId = borrowTx._id;
-                        borrowTx.linkedTransactionId = lendTx._id;
-                        await lendTx.save();
-                        await borrowTx.save();
-                    }
-                }
+                // We used to create Lend/Borrow transactions here.
+                // REMOVED because:
+                // 1. It causes double-counting in the Settlements tab (since Settlements already processes GroupExpenses).
+                // 2. It creates sync issues when one is deleted/settled and the other isn't.
+                // 3. User reported "ghost" records and "emerging records" due to this redundancy.
+                // Group debts are now managed solely through GroupExpense and Settlement models.
             }
         }
 

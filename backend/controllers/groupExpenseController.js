@@ -1,6 +1,7 @@
 const GroupExpense = require('../models/GroupExpense');
 const Group = require('../models/Group');
 const Settlement = require('../models/Settlement');
+const mongoose = require('mongoose');
 
 // Add Group Expense
 exports.addExpense = async (req, res) => {
@@ -88,35 +89,53 @@ exports.getBalances = async (req, res) => {
         const expenses = await GroupExpense.find({ groupId });
         const settlements = await Settlement.find({ groupId, confirmed: true });
 
+        // Create Name-to-ID map for this group to unify buckets
+        const group = await mongoose.model('Group').findById(groupId);
+        const nameToId = {};
+        if (group) {
+            group.members.forEach(m => {
+                if (m.userId && m.guestName) {
+                    nameToId[m.guestName.toLowerCase()] = m.userId.toString();
+                }
+            });
+        }
+
+        const getCanonicalKey = (id, guestName) => {
+            const idStr = id ? (id._id || id).toString() : null;
+            if (idStr) return idStr;
+            if (guestName && nameToId[guestName.toLowerCase()]) {
+                return nameToId[guestName.toLowerCase()];
+            }
+            return guestName ? `guest:${guestName.toLowerCase()}` : 'unknown';
+        };
+
         // Calculate balances
         // Map of userId/guestName -> balance (positive = owed to them, negative = they owe)
         let balances = {};
 
-        const getKey = (userId, guestName) => userId ? userId.toString() : `guest:${guestName}`;
-
         // Process expenses
         expenses.forEach(exp => {
-            const payerKey = getKey(exp.payerId, exp.payerGuestName);
+            const payerKey = getCanonicalKey(exp.payerId, exp.payerGuestName);
             if (!balances[payerKey]) balances[payerKey] = 0;
-            balances[payerKey] += exp.amount; // They paid, so they are owed this amount initially
+            balances[payerKey] += exp.amount; // They paid
 
             exp.splits.forEach(split => {
-                const debtorKey = getKey(split.userId, split.guestName);
+                const debtorKey = getCanonicalKey(split.userId, split.guestName);
                 if (!balances[debtorKey]) balances[debtorKey] = 0;
-                balances[debtorKey] -= split.amount; // They owe this amount
+                balances[debtorKey] -= split.amount; // They owe
             });
         });
 
         // Process settlements (payments made)
         settlements.forEach(set => {
-            const fromKey = getKey(set.fromUserId, set.fromGuestName);
-            const toKey = getKey(set.toUserId, set.toGuestName);
+            const fromKey = getCanonicalKey(set.fromUserId, set.fromGuestName);
+            const toKey = getCanonicalKey(set.toUserId, set.toGuestName);
 
             if (!balances[fromKey]) balances[fromKey] = 0;
             if (!balances[toKey]) balances[toKey] = 0;
 
-            balances[fromKey] += set.amount; // They paid, so their debt decreases (or credit increases)
-            balances[toKey] -= set.amount;   // They received, so their credit decreases
+            balances[fromKey] += set.amount;
+            balances[toKey] -= set.amount;
         });
 
         // Format output

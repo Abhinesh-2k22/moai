@@ -25,13 +25,18 @@ const Dashboard = () => {
 
     const fetchData = async () => {
         try {
-            const res = await api.get('/transactions');
-            const allTransactions = res.data;
-            setTransactions(allTransactions);
+            const [txRes, settleRes, historyRes] = await Promise.all([
+                api.get('/transactions'),
+                api.get('/settlements'),
+                api.get('/settlements/history')
+            ]);
 
-            const resSettlements = await api.get('/settlements'); // Fetch verified balances
-            const settlementsData = resSettlements.data;
-            setSettlements(settlementsData); // Store full settlement data if needed, or just balances
+            const allTransactions = txRes.data;
+            const settlementsData = settleRes.data;
+            const settlementHistory = historyRes.data;
+
+            setTransactions(allTransactions);
+            setSettlements(settlementHistory);
 
             // Calculate totals for CURRENT MONTH only
             const now = new Date();
@@ -57,16 +62,13 @@ const Dashboard = () => {
             });
 
             // Calculate To Settle (Borrow) and To Expect (Lend) from SETTLEMENTS API
-            // This includes both Group debts and Personal debts
             let lend = 0;
             let borrow = 0;
 
             settlementsData.forEach(balance => {
                 if (balance.total > 0) {
-                    // Positive balance means I am owed money (To Expect / Lend)
                     lend += balance.total;
                 } else if (balance.total < 0) {
-                    // Negative balance means I owe money (To Settle / Borrow)
                     borrow += Math.abs(balance.total);
                 }
             });
@@ -132,28 +134,16 @@ const Dashboard = () => {
             else if (tx.type === 'borrow') balance += tx.amount;
         });
 
-        // Adjust for Settlements
+        // Adjust for Verified Settlements (Repayments)
         if (user) {
+            const userId = (user._id || user.id)?.toString();
             settlements.forEach(settle => {
-                // If I paid (fromUserId is me), I lost cash (Balance decreases)
-                // BUT wait, if I paid back a debt (Borrow), my Balance was +100 (Borrow).
-                // Now I pay -100. Balance = 0. Correct.
+                const fromIdStr = (settle.fromUserId?._id || settle.fromUserId || (settle.fromGuestName === user.name ? userId : null))?.toString();
+                const toIdStr = (settle.toUserId?._id || settle.toUserId || (settle.toGuestName === user.name ? userId : null))?.toString();
 
-                // If I paid a "Lend" request (I am lending)? 
-                // No, "Lend" transaction handles the initial cash out.
-                // Settlement is only for Repayment of existing debts.
-
-                // Case 1: I borrowed 100. Balance +100.
-                // I pay back 100 (Settlement from me). Balance -100. Net 0. Correct.
-
-                // Case 2: I lent 100. Balance -100.
-                // They pay me back 100 (Settlement to me). Balance +100. Net 0. Correct.
-
-                const userId = user._id || user.id;
-
-                if (settle.fromUserId === userId) {
+                if (fromIdStr === userId) {
                     balance -= settle.amount;
-                } else if (settle.toUserId === userId) {
+                } else if (toIdStr === userId) {
                     balance += settle.amount;
                 }
             });
@@ -288,60 +278,62 @@ const Dashboard = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                transactions.map((tx) => (
-                                    <tr key={tx._id} className="hover:bg-gray-50/80 transition duration-200">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                            <div className="flex flex-col">
-                                                <div className="flex items-center gap-2 font-medium">
-                                                    <Calendar size={16} className="text-gray-400" />
-                                                    {format(new Date(tx.date), 'MMM dd, yyyy')}
+                                transactions
+                                    .filter(tx => !(['lend', 'borrow'].includes(tx.type) && tx.isSettled))
+                                    .map((tx) => (
+                                        <tr key={tx._id} className="hover:bg-gray-50/80 transition duration-200">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2 font-medium">
+                                                        <Calendar size={16} className="text-gray-400" />
+                                                        {format(new Date(tx.date), 'MMM dd, yyyy')}
+                                                    </div>
+                                                    <div className="text-xs text-gray-400 ml-6">
+                                                        {format(new Date(tx.date), 'hh:mm a')}
+                                                    </div>
                                                 </div>
-                                                <div className="text-xs text-gray-400 ml-6">
-                                                    {format(new Date(tx.date), 'hh:mm a')}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={`px-3 py-1 text-xs font-medium rounded-full border ${tx.type === 'income' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                                    tx.type === 'investment' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                                        tx.type === 'lend' ? 'bg-pink-50 text-pink-600 border-pink-100' :
+                                                            tx.type === 'borrow' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                                                'bg-rose-50 text-rose-600 border-rose-100'
+                                                    }`}>
+                                                    {tx.type === 'lend' ? 'Lent' :
+                                                        tx.type === 'borrow' ? 'Borrowed' :
+                                                            tx.category || tx.type}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-medium">
+                                                <div className="flex items-center gap-2">
+                                                    {tx.description || '-'}
+                                                    {tx.status === 'pending' && (
+                                                        <span title="Pending Confirmation" className="text-amber-500 bg-amber-50 p-1 rounded-full">
+                                                            <Clock size={14} />
+                                                        </span>
+                                                    )}
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`px-3 py-1 text-xs font-medium rounded-full border ${tx.type === 'income' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                tx.type === 'investment' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                                    tx.type === 'lend' ? 'bg-pink-50 text-pink-600 border-pink-100' :
-                                                        tx.type === 'borrow' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                                            'bg-rose-50 text-rose-600 border-rose-100'
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold text-right ${tx.type === 'income' ? 'text-emerald-600' :
+                                                tx.type === 'investment' ? 'text-amber-600' :
+                                                    tx.type === 'lend' ? 'text-pink-600' :
+                                                        tx.type === 'borrow' ? 'text-blue-600' :
+                                                            'text-rose-600'
                                                 }`}>
-                                                {tx.type === 'lend' ? 'Lent' :
-                                                    tx.type === 'borrow' ? 'Borrowed' :
-                                                        tx.category || tx.type}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-medium">
-                                            <div className="flex items-center gap-2">
-                                                {tx.description || '-'}
-                                                {tx.status === 'pending' && (
-                                                    <span title="Pending Confirmation" className="text-amber-500 bg-amber-50 p-1 rounded-full">
-                                                        <Clock size={14} />
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold text-right ${tx.type === 'income' ? 'text-emerald-600' :
-                                            tx.type === 'investment' ? 'text-amber-600' :
-                                                tx.type === 'lend' ? 'text-pink-600' :
-                                                    tx.type === 'borrow' ? 'text-blue-600' :
-                                                        'text-rose-600'
-                                            }`}>
-                                            {tx.type === 'income' || (tx.type === 'investment' && tx.investmentType === 'sell') || tx.type === 'borrow' ? '+' : '-'}₹{tx.amount.toFixed(2)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                                            <button
-                                                onClick={() => handleDelete(tx._id)}
-                                                className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                                                title="Delete Transaction"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
+                                                {tx.type === 'income' || (tx.type === 'investment' && tx.investmentType === 'sell') || tx.type === 'borrow' ? '+' : '-'}₹{tx.amount.toFixed(2)}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                <button
+                                                    onClick={() => handleDelete(tx._id)}
+                                                    className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                                                    title="Delete Transaction"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
                             )}
                         </tbody>
                     </table>

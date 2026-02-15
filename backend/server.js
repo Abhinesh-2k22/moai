@@ -23,7 +23,6 @@ app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.use('/api/categories', require('./routes/categoryRoutes'));
 app.use('/api/groups', require('./routes/groupRoutes'));
 app.use('/api/settlements', require('./routes/settlementRoutes'));
-app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/notes', require('./routes/noteRoutes'));
 

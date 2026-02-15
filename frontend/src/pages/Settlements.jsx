@@ -30,7 +30,10 @@ const Settlements = () => {
         if (!window.confirm(`Settle all balances with ${name}? Net amount: ₹${Math.abs(amount).toFixed(2)}`)) return;
 
         try {
-            await api.post('/settlements/settle-all', { toUserId: otherUserId });
+            await api.post('/settlements/settle-all', {
+                toUserId: otherUserId,
+                userName: name
+            });
             setSettlements(settlements.filter(s => s.userId !== otherUserId));
             alert('Settled successfully!');
         } catch (err) {

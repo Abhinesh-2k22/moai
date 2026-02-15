@@ -2,19 +2,24 @@ const Settlement = require('../models/Settlement');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const GroupExpense = require('../models/GroupExpense');
+const Group = require('../models/Group');
 const mongoose = require('mongoose');
 
 exports.getSettlements = async (req, res) => {
     try {
         const userIdStr = req.user.id;
         const userIdObj = new mongoose.Types.ObjectId(userIdStr);
+        const user = await User.findById(userIdObj);
+        const userName = user ? user.name : null;
 
         // 1. Fetch all expenses where user is involved
         // Using explicit ObjectId for reliable matching
         const expenses = await GroupExpense.find({
             $or: [
                 { payerId: userIdObj },
-                { 'splits.userId': userIdObj }
+                { payerGuestName: userName },
+                { 'splits.userId': userIdObj },
+                { 'splits.guestName': userName }
             ]
         }).populate('groupId', 'name').populate('payerId', 'name').populate('splits.userId', 'name');
 
@@ -22,9 +27,11 @@ exports.getSettlements = async (req, res) => {
         const settlements = await Settlement.find({
             $or: [
                 { fromUserId: userIdObj },
-                { toUserId: userIdObj }
+                { toUserId: userIdObj },
+                { fromGuestName: userName },
+                { toGuestName: userName }
             ]
-        });
+        }).populate('fromUserId', 'name').populate('toUserId', 'name');
 
         // 2.5 Fetch Personal Transactions (Lend/Borrow) - UNSETTLED ONLY
         // Remove status: 'confirmed' filter to include all legacy/pending transactions
@@ -33,6 +40,26 @@ exports.getSettlements = async (req, res) => {
             $or: [{ type: 'lend' }, { type: 'borrow' }],
             isSettled: false
         }).populate('recipientUserId', 'name');
+
+        // 0. Name-to-ID Mapping (Bucket Unification)
+        const groups = await mongoose.model('Group').find({ 'members.userId': userIdObj });
+        const nameToId = {};
+        groups.forEach(g => {
+            g.members.forEach(m => {
+                if (m.userId && m.guestName) {
+                    nameToId[m.guestName.toLowerCase()] = m.userId.toString();
+                }
+            });
+        });
+
+        const getCanonicalKey = (id, guestName) => {
+            const idStr = id ? (id._id || id).toString() : null;
+            if (idStr) return idStr;
+            if (guestName && nameToId[guestName.toLowerCase()]) {
+                return nameToId[guestName.toLowerCase()];
+            }
+            return guestName ? `guest:${guestName.toLowerCase()}` : 'unknown';
+        };
 
         // 3. Calculate Net Balances
         // Map<OtherUserId | Name, { userId: String, name: String, total: Number, breakdown: Array }>
@@ -78,39 +105,74 @@ exports.getSettlements = async (req, res) => {
 
         // Process Expenses
         expenses.forEach(exp => {
-            // Safety checks for populated fields to prevent crashes if data is missing
-            if ((!exp.payerId && !exp.payerGuestName)) return;
-
-            const payerId = exp.payerId ? exp.payerId._id.toString() : `guest:${exp.payerGuestName}`;
-            const payerName = exp.payerId ? exp.payerId.name : `${exp.payerGuestName} (Guest)`;
-            const groupId = exp.groupId ? exp.groupId._id.toString() : 'unknown';
+            const payerKey = getCanonicalKey(exp.payerId, exp.payerGuestName);
+            const payerName = exp.payerId ? (exp.payerId.name || exp.payerId) : `${exp.payerGuestName} (Guest)`;
+            const groupId = exp.groupId ? (exp.groupId._id || exp.groupId).toString() : 'unknown';
             const groupName = exp.groupId ? exp.groupId.name : 'Unknown Group';
 
-            if (payerId === userIdStr) {
+            const payerIsMe = payerKey === userIdStr || (exp.payerGuestName && userName && exp.payerGuestName.toLowerCase() === userName.toLowerCase());
+
+            if (payerIsMe) {
                 // I paid, others owe me (Positive)
                 exp.splits.forEach(split => {
-                    const debtorId = split.userId ? split.userId._id.toString() : `guest:${split.guestName}`;
-                    // Skip if split is with myself
-                    if (debtorId !== userIdStr) {
-                        const debtorName = split.userId ? split.userId.name : `${split.guestName} (Guest)`;
-                        initBalance(debtorId, debtorName);
-                        updateBreakdown(debtorId, 'group', groupId, groupName, split.amount);
+                    const debtorKey = getCanonicalKey(split.userId, split.guestName);
+                    const debtorIsMe = debtorKey === userIdStr || (split.guestName && userName && split.guestName.toLowerCase() === userName.toLowerCase());
+
+                    if (!debtorIsMe) {
+                        const debtorName = split.userId ? (split.userId.name || split.userId) : `${split.guestName} (Guest)`;
+                        initBalance(debtorKey, debtorName);
+                        updateBreakdown(debtorKey, 'group', groupId, groupName, split.amount);
                     }
                 });
             } else {
-                // Someone else paid
-                // Check if I am in splits
-                const mySplit = exp.splits.find(s =>
-                    (s.userId && s.userId._id.toString() === userIdStr)
-                );
+                // Someone else paid, check if I am in splits
+                const mySplit = exp.splits.find(s => {
+                    const k = getCanonicalKey(s.userId, s.guestName);
+                    return k === userIdStr || (s.guestName && userName && s.guestName.toLowerCase() === userName.toLowerCase());
+                });
 
                 if (mySplit) {
                     // I owe payer (Negative)
-                    initBalance(payerId, payerName);
-                    updateBreakdown(payerId, 'group', groupId, groupName, -mySplit.amount);
+                    initBalance(payerKey, payerName);
+                    updateBreakdown(payerKey, 'group', groupId, groupName, -mySplit.amount);
                 }
             }
         });
+
+        // Adjust for Settlements (canonical keys)
+        settlements.forEach(settle => {
+            const fromKey = getCanonicalKey(settle.fromUserId, settle.fromGuestName);
+            const toKey = getCanonicalKey(settle.toUserId, settle.toGuestName);
+            const groupId = settle.groupId ? (settle.groupId._id || settle.groupId).toString() : null;
+            const groupName = 'Settlement/Payment';
+
+            const fromIsMe = fromKey === userIdStr || (settle.fromGuestName && userName && settle.fromGuestName.toLowerCase() === userName.toLowerCase());
+            const toIsMe = toKey === userIdStr || (settle.toGuestName && userName && settle.toGuestName.toLowerCase() === userName.toLowerCase());
+
+            // partyKey is the "other" person
+            let partyKey = fromIsMe ? toKey : fromKey;
+
+            let partyName = fromIsMe ?
+                (settle.toUserId ? settle.toUserId.name : settle.toGuestName) :
+                (settle.fromUserId ? settle.fromUserId.name : settle.fromGuestName);
+
+            if (!balances[partyKey]) {
+                initBalance(partyKey, partyName || 'Unknown');
+            }
+
+            if (fromIsMe) {
+                // I PAID (Balance increases/Credit increases)
+                // Note: balances[partyKey].total is updated inside updateBreakdown
+                if (groupId) updateBreakdown(partyKey, 'group', groupId, groupName, settle.amount);
+                else updateBreakdown(partyKey, 'settlement', 'general', 'General Settlement', settle.amount);
+            } else if (toIsMe) {
+                // I RECEIVED (Balance decreases/Credit decreases)
+                if (groupId) updateBreakdown(partyKey, 'group', groupId, groupName, -settle.amount);
+                else updateBreakdown(partyKey, 'settlement', 'general', 'General Settlement', -settle.amount);
+            }
+        });
+
+        // Skip the separate settlements loop below as we unified it above
 
         // Process Personal Transactions
         personalTx.forEach(tx => {
@@ -118,8 +180,9 @@ exports.getSettlements = async (req, res) => {
             let otherId, otherName;
 
             if (tx.recipientUserId) {
-                otherId = tx.recipientUserId._id.toString();
-                otherName = tx.recipientUserId.name;
+                const recipientObj = tx.recipientUserId;
+                otherId = getCanonicalKey(recipientObj, null);
+                otherName = recipientObj.name || recipientObj;
             } else {
                 return; // Should not happen for lend/borrow if correctly created
             }
@@ -136,40 +199,7 @@ exports.getSettlements = async (req, res) => {
             updateBreakdown(otherId, 'personal', null, 'Personal Expenses', amount, tx._id.toString());
         });
 
-        // Process Settlements (Reduces debt/credit)
-        settlements.forEach(settle => {
-            const fromId = settle.fromUserId ? settle.fromUserId.toString() : `guest:${settle.fromGuestName}`;
-            const toId = settle.toUserId ? settle.toUserId.toString() : `guest:${settle.toGuestName}`;
-            const groupId = settle.groupId ? settle.groupId.toString() : null;
-            const groupName = 'Settlement/Payment';
-
-            // Simplified: Just adjust total. 
-            // If I PAID (fromId === userId), I reduced what I OWE (negative balance becomes less negative -> Add positive).
-            if (fromId === userIdStr) {
-                if (balances[toId]) {
-                    balances[toId].total += settle.amount;
-                    // Apply to breakdown if group context exists
-                    if (groupId) {
-                        updateBreakdown(toId, 'group', groupId, groupName, settle.amount);
-                    } else {
-                        // General settlement? For now, maybe don't add to breakdown to avoid clutter, 
-                        // OR add a 'General' entry. Let's add it to ensure Sum(Breakdown) ~= Total
-                        updateBreakdown(toId, 'settlement', 'general', 'General Payment', settle.amount);
-                    }
-                }
-            } else if (toId === userIdStr) {
-                // I RECEIVED (toId === userId), I reduced what is OWED TO ME (positive balance becomes less positive -> Subtract).
-                if (balances[fromId]) {
-                    balances[fromId].total -= settle.amount;
-                    // Apply to breakdown
-                    if (groupId) {
-                        updateBreakdown(fromId, 'group', groupId, groupName, -settle.amount);
-                    } else {
-                        updateBreakdown(fromId, 'settlement', 'general', 'General Payment', -settle.amount);
-                    }
-                }
-            }
-        });
+        // Skipped redundant legacy processing (merged above)
 
         // Filter and Format
         const result = Object.values(balances)
@@ -191,19 +221,23 @@ exports.getSettlements = async (req, res) => {
 
 // Settle All Balances with a User
 exports.settleAll = async (req, res) => {
-    const { toUserId, toGuestName } = req.body;
+    const { toUserId, userName } = req.body; // userName comes from frontend Settlements.jsx
     const fromUserId = req.user.id;
+    // We also need the current user's name to match them as a Guest in other records
+    const currentUser = await User.findById(fromUserId);
+    const fromUserName = currentUser ? currentUser.name : null;
 
     try {
         // 1. Personal Transactions
-        const personalDebts = await Transaction.find({
+        const personalTxQuery = {
             $or: [
-                { userId: fromUserId, recipientUserId: toUserId }, // I lend/borrow with them
-                { userId: toUserId, recipientUserId: fromUserId }  // They lend/borrow with me
+                { userId: fromUserId, recipientUserId: toUserId },
+                { userId: toUserId, recipientUserId: fromUserId }
             ],
-            $or: [{ type: 'lend' }, { type: 'borrow' }],
+            type: { $in: ['lend', 'borrow'] },
             isSettled: false
-        });
+        };
+        const personalDebts = await Transaction.find(personalTxQuery);
 
         for (let tx of personalDebts) {
             tx.isSettled = true;
@@ -211,11 +245,17 @@ exports.settleAll = async (req, res) => {
         }
 
         // 2. Group Expenses
-        // Calculate NET amount per group and create a Settlement for it.
+        // Match by ID OR Name for both parties
         const expenses = await GroupExpense.find({
             $or: [
+                // I paid, they are in splits
                 { payerId: fromUserId, 'splits.userId': toUserId },
-                { payerId: toUserId, 'splits.userId': fromUserId }
+                { payerGuestName: fromUserName, 'splits.userId': toUserId },
+                { payerId: fromUserId, 'splits.guestName': userName },
+                // They paid, I am in splits
+                { payerId: toUserId, 'splits.userId': fromUserId },
+                { payerGuestName: userName, 'splits.userId': fromUserId },
+                { payerId: toUserId, 'splits.guestName': fromUserName }
             ]
         }).populate('groupId');
 
@@ -227,13 +267,19 @@ exports.settleAll = async (req, res) => {
             const gid = exp.groupId._id.toString();
             if (!groupBalances[gid]) groupBalances[gid] = 0;
 
-            if (exp.payerId.toString() === fromUserId) {
+            if (exp.payerId && exp.payerId.toString() === fromUserId || exp.payerGuestName === fromUserName) {
                 // I paid, they owe me.
-                const split = exp.splits.find(s => s.userId && s.userId.toString() === toUserId);
+                const split = exp.splits.find(s =>
+                    (s.userId && s.userId.toString() === toUserId) ||
+                    (s.guestName === userName)
+                );
                 if (split) groupBalances[gid] += split.amount;
             } else {
                 // They paid, I owe.
-                const split = exp.splits.find(s => s.userId && s.userId.toString() === fromUserId);
+                const split = exp.splits.find(s =>
+                    (s.userId && s.userId.toString() === fromUserId) ||
+                    (s.guestName === fromUserName)
+                );
                 if (split) groupBalances[gid] -= split.amount;
             }
         });
@@ -242,21 +288,27 @@ exports.settleAll = async (req, res) => {
         const existingSettlements = await Settlement.find({
             $or: [
                 { fromUserId: fromUserId, toUserId: toUserId },
-                { fromUserId: toUserId, toUserId: fromUserId }
+                { fromUserId: toUserId, toUserId: fromUserId },
+                { fromGuestName: fromUserName, toUserId: toUserId },
+                { fromUserId: toUserId, toGuestName: fromUserName },
+                { fromUserId: fromUserId, toGuestName: userName },
+                { fromGuestName: userName, toUserId: fromUserId }
             ]
         });
 
         existingSettlements.forEach(s => {
-            if (!s.groupId) return;
-            const gid = s.groupId.toString();
-            if (groupBalances[gid] !== undefined) {
-                if (s.fromUserId.toString() === fromUserId) {
-                    // I paid previously. Reduced debt (add positive).
-                    groupBalances[gid] += s.amount;
-                } else {
-                    // They paid. Reduced credit (subtract).
-                    groupBalances[gid] -= s.amount;
-                }
+            const gid = s.groupId ? s.groupId.toString() : 'general';
+            if (!groupBalances[gid]) groupBalances[gid] = 0;
+
+            const fromId = s.fromUserId ? s.fromUserId.toString() : null;
+            const toId = s.toUserId ? s.toUserId.toString() : null;
+
+            if (fromId === fromUserId || s.fromGuestName === userName) {
+                // I paid previously. Reduced debt (add positive).
+                groupBalances[gid] += s.amount;
+            } else if (toId === fromUserId || s.toGuestName === userName) {
+                // They paid. Reduced credit (subtract).
+                groupBalances[gid] -= s.amount;
             }
         });
 
@@ -300,10 +352,50 @@ exports.settleAll = async (req, res) => {
 };
 
 exports.createSettlement = async (req, res) => {
-    // Keeping basic implementation if needed or placeholder
-    res.status(501).send('Use settleAll for now');
+    const { groupId, toUserId, toGuestName, amount } = req.body;
+    const fromUserId = req.user.id;
+
+    try {
+        const newSettlement = new Settlement({
+            groupId,
+            fromUserId,
+            toUserId,
+            toGuestName,
+            amount,
+            confirmed: true // For now, auto-confirm when manually added from group
+        });
+
+        await newSettlement.save();
+        res.json(newSettlement);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
 };
 
 exports.getSettlementHistory = async (req, res) => {
-    res.status(501).send('Not implemented yet');
+    try {
+        const userId = req.user.id;
+        const user = await User.findById(userId);
+        const userName = user ? user.name : null;
+
+        const history = await Settlement.find({
+            $or: [
+                { fromUserId: userId },
+                { toUserId: userId },
+                { fromGuestName: userName },
+                { toGuestName: userName }
+            ],
+            confirmed: true
+        })
+            .populate('fromUserId', 'name')
+            .populate('toUserId', 'name')
+            .populate('groupId', 'name')
+            .sort({ date: -1 });
+
+        res.json(history);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
 };
