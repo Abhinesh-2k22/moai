@@ -161,12 +161,12 @@ const Dashboard = () => {
         <div className="space-y-8 animate-fade-in">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
-                    <p className="text-gray-500 mt-1">Welcome back, {user?.name}!</p>
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Dashboard</h1>
+                    <p className="text-gray-500 dark:text-gray-400 mt-1">Welcome back, {user?.name}!</p>
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-2 md:px-6 md:py-3 text-sm md:text-base rounded-xl hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-1"
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 md:px-6 md:py-3 text-sm md:text-base rounded-xl transition-all shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-1 cursor-pointer"
                 >
                     <Plus size={20} />
                     Add Transaction
@@ -177,72 +177,72 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div className="glass-card p-4 rounded-2xl relative overflow-hidden group">
                     <div className="flex items-center gap-3 relative z-10">
-                        <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl shadow-sm">
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-xl shadow-sm">
                             <TrendingUp size={24} />
                         </div>
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase">Income</p>
-                            <p className="text-xl font-bold text-gray-800">₹{summary.income.toFixed(0)}</p>
+                            <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase">Income</p>
+                            <p className="text-xl font-bold text-gray-800 dark:text-slate-100">₹{summary.income.toFixed(0)}</p>
                         </div>
                     </div>
                 </div>
 
                 <div className="glass-card p-4 rounded-2xl relative overflow-hidden group">
                     <div className="flex items-center gap-3 relative z-10">
-                        <div className="p-3 bg-rose-50 text-rose-600 rounded-xl shadow-sm">
+                        <div className="p-3 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 rounded-xl shadow-sm">
                             <TrendingDown size={24} />
                         </div>
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase">Expense</p>
-                            <p className="text-xl font-bold text-gray-800">₹{summary.expense.toFixed(0)}</p>
+                            <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase">Expense</p>
+                            <p className="text-xl font-bold text-gray-800 dark:text-slate-100">₹{summary.expense.toFixed(0)}</p>
                         </div>
                     </div>
                 </div>
 
                 <div className="glass-card p-4 rounded-2xl relative overflow-hidden group">
                     <div className="flex items-center gap-3 relative z-10">
-                        <div className="p-3 bg-amber-50 text-amber-600 rounded-xl shadow-sm">
+                        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-xl shadow-sm">
                             <DollarSign size={24} />
                         </div>
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase">Invested</p>
-                            <p className="text-xl font-bold text-gray-800">₹{((summary.investmentBuy || 0) - (summary.investmentSell || 0)).toFixed(0)}</p>
+                            <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase">Invested</p>
+                            <p className="text-xl font-bold text-gray-800 dark:text-slate-100">₹{((summary.investmentBuy || 0) - (summary.investmentSell || 0)).toFixed(0)}</p>
                         </div>
                     </div>
                 </div>
 
                 <div className="glass-card p-4 rounded-2xl relative overflow-hidden group">
                     <div className="flex items-center gap-3 relative z-10">
-                        <div className="p-3 bg-pink-50 text-pink-600 rounded-xl shadow-sm">
+                        <div className="p-3 bg-pink-50 dark:bg-pink-950/30 text-pink-600 dark:text-pink-400 rounded-xl shadow-sm">
                             <TrendingUp size={24} className="rotate-45" />
                         </div>
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase">To Settle</p>
-                            <p className="text-xl font-bold text-gray-800">₹{summary.borrow.toFixed(0)}</p>
+                            <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase">To Settle</p>
+                            <p className="text-xl font-bold text-gray-800 dark:text-slate-100">₹{summary.borrow.toFixed(0)}</p>
                         </div>
                     </div>
                 </div>
 
                 <div className="glass-card p-4 rounded-2xl relative overflow-hidden group">
                     <div className="flex items-center gap-3 relative z-10">
-                        <div className="p-3 bg-blue-50 text-blue-600 rounded-xl shadow-sm">
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 rounded-xl shadow-sm">
                             <TrendingDown size={24} className="rotate-45" />
                         </div>
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase">To Expect</p>
-                            <p className="text-xl font-bold text-gray-800">₹{summary.lend.toFixed(0)}</p>
+                            <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase">To Expect</p>
+                            <p className="text-xl font-bold text-gray-800 dark:text-slate-100">₹{summary.lend.toFixed(0)}</p>
                         </div>
                     </div>
                 </div>
 
                 <div className="glass-card p-4 rounded-2xl relative overflow-hidden group">
                     <div className="flex items-center gap-3 relative z-10">
-                        <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl shadow-sm">
+                        <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded-xl shadow-sm">
                             <Wallet size={24} />
                         </div>
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase">Balance</p>
-                            <p className="text-xl font-bold text-gray-800">₹{balance.toFixed(0)}</p>
+                            <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase">Balance</p>
+                            <p className="text-xl font-bold text-gray-800 dark:text-slate-100">₹{balance.toFixed(0)}</p>
                         </div>
                     </div>
                 </div>
@@ -250,27 +250,27 @@ const Dashboard = () => {
 
             {/* Recent Transactions */}
             <div className="glass-card rounded-2xl overflow-hidden">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-gray-800">Recent Transactions</h2>
-                    <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{transactions.length} entries</span>
+                <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex justify-between items-center">
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-white">Recent Transactions</h2>
+                    <span className="text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-800 px-3 py-1 rounded-full">{transactions.length} entries</span>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">
-                        <thead className="bg-gray-50/50">
+                        <thead className="bg-gray-50/50 dark:bg-slate-900/30">
                             <tr>
-                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Category/Type</th>
-                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Description</th>
-                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
-                                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Category/Type</th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Description</th>
+                                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amount</th>
+                                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-gray-100 dark:divide-slate-800/80">
                             {transactions.length === 0 ? (
                                 <tr>
-                                    <td colSpan="5" className="px-6 py-12 text-center text-gray-400">
+                                    <td colSpan="5" className="px-6 py-12 text-center text-gray-400 dark:text-gray-500">
                                         <div className="flex flex-col items-center gap-3">
-                                            <div className="p-4 bg-gray-50 rounded-full">
+                                            <div className="p-4 bg-gray-50 dark:bg-slate-900/50 rounded-full">
                                                 <Tag size={32} />
                                             </div>
                                             <p>No transactions found. Start logging your expenses!</p>
@@ -281,52 +281,53 @@ const Dashboard = () => {
                                 transactions
                                     .filter(tx => !(['lend', 'borrow'].includes(tx.type) && tx.isSettled))
                                     .map((tx) => (
-                                        <tr key={tx._id} className="hover:bg-gray-50/80 transition duration-200">
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                        <tr key={tx._id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/30 transition duration-200">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
                                                 <div className="flex flex-col">
                                                     <div className="flex items-center gap-2 font-medium">
-                                                        <Calendar size={16} className="text-gray-400" />
+                                                        <Calendar size={16} className="text-gray-400 dark:text-gray-500" />
                                                         {format(new Date(tx.date), 'MMM dd, yyyy')}
                                                     </div>
-                                                    <div className="text-xs text-gray-400 ml-6">
+                                                    <div className="text-xs text-gray-400 dark:text-gray-500 ml-6">
                                                         {format(new Date(tx.date), 'hh:mm a')}
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={`px-3 py-1 text-xs font-medium rounded-full border ${tx.type === 'income' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                    tx.type === 'investment' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                                        tx.type === 'lend' ? 'bg-pink-50 text-pink-600 border-pink-100' :
-                                                            tx.type === 'borrow' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                                                'bg-rose-50 text-rose-600 border-rose-100'
-                                                    }`}>
+                                                <span className={`px-3 py-1 text-xs font-medium rounded-full border ${
+                                                    tx.type === 'income' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-100/20' :
+                                                    tx.type === 'investment' ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-100/20' :
+                                                    tx.type === 'lend' ? 'bg-pink-50 dark:bg-pink-950/30 text-pink-600 dark:text-pink-400 border-pink-100/20' :
+                                                    tx.type === 'borrow' ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-100/20' :
+                                                    'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-100/20'
+                                                }`}>
                                                     {tx.type === 'lend' ? 'Lent' :
                                                         tx.type === 'borrow' ? 'Borrowed' :
                                                             tx.category || tx.type}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-medium">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 dark:text-gray-200 font-medium">
                                                 <div className="flex items-center gap-2">
                                                     {tx.description || '-'}
                                                     {tx.status === 'pending' && (
-                                                        <span title="Pending Confirmation" className="text-amber-500 bg-amber-50 p-1 rounded-full">
+                                                        <span title="Pending Confirmation" className="text-amber-500 bg-amber-50 dark:bg-amber-950/20 p-1 rounded-full">
                                                             <Clock size={14} />
                                                         </span>
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold text-right ${tx.type === 'income' ? 'text-emerald-600' :
-                                                tx.type === 'investment' ? 'text-amber-600' :
-                                                    tx.type === 'lend' ? 'text-pink-600' :
-                                                        tx.type === 'borrow' ? 'text-blue-600' :
-                                                            'text-rose-600'
+                                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold text-right ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' :
+                                                tx.type === 'investment' ? 'text-amber-600 dark:text-amber-400' :
+                                                    tx.type === 'lend' ? 'text-pink-600 dark:text-pink-400' :
+                                                        tx.type === 'borrow' ? 'text-blue-600 dark:text-blue-400' :
+                                                            'text-rose-600 dark:text-rose-400'
                                                 }`}>
                                                 {tx.type === 'income' || (tx.type === 'investment' && tx.investmentType === 'sell') || tx.type === 'borrow' ? '+' : '-'}₹{tx.amount.toFixed(2)}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-center">
                                                 <button
                                                     onClick={() => handleDelete(tx._id)}
-                                                    className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                                                    className="p-2 text-gray-400 dark:text-gray-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-all cursor-pointer"
                                                     title="Delete Transaction"
                                                 >
                                                     <Trash2 size={18} />

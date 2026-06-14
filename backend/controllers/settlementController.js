@@ -1,48 +1,63 @@
 const Settlement = require('../models/Settlement');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
+const DummyUser = require('../models/DummyUser');
 const GroupExpense = require('../models/GroupExpense');
 const Group = require('../models/Group');
 const mongoose = require('mongoose');
 
-exports.getSettlements = async (req, res) => {
+const calculateAllBalances = async (req, perspective = null) => {
     try {
-        const userIdStr = req.user.id;
-        const userIdObj = new mongoose.Types.ObjectId(userIdStr);
-        const user = await User.findById(userIdObj);
-        const userName = user ? user.name : null;
+        const isDummy = !!perspective;
+        const userIdStr = isDummy ? null : req.user.id;
+        const userIdObj = isDummy ? null : new mongoose.Types.ObjectId(userIdStr);
+        let user, userName;
+        if (isDummy) {
+            userName = perspective.name;
+        } else {
+            user = await User.findById(userIdObj);
+            userName = user ? user.name : null;
+        }
 
-        // 1. Fetch all expenses where user is involved
-        // Using explicit ObjectId for reliable matching
+        // 1. Fetch all expenses where user/dummy is involved
         const expenses = await GroupExpense.find({
             $or: [
-                { payerId: userIdObj },
+                { payerId: isDummy ? null : userIdObj },
                 { payerGuestName: userName },
-                { 'splits.userId': userIdObj },
+                { 'splits.userId': isDummy ? null : userIdObj },
                 { 'splits.guestName': userName }
             ]
         }).populate('groupId', 'name').populate('payerId', 'name').populate('splits.userId', 'name');
 
-        // 2. Fetch all settlements where user is involved
+        // 2. Fetch confirmed settlements
         const settlements = await Settlement.find({
             $or: [
-                { fromUserId: userIdObj },
-                { toUserId: userIdObj },
+                { fromUserId: isDummy ? null : userIdObj },
+                { toUserId: isDummy ? null : userIdObj },
                 { fromGuestName: userName },
                 { toGuestName: userName }
-            ]
+            ],
+            confirmed: true
         }).populate('fromUserId', 'name').populate('toUserId', 'name');
 
-        // 2.5 Fetch Personal Transactions (Lend/Borrow) - UNSETTLED ONLY
-        // Remove status: 'confirmed' filter to include all legacy/pending transactions
-        const personalTx = await Transaction.find({
-            userId: userIdObj,
-            $or: [{ type: 'lend' }, { type: 'borrow' }],
-            isSettled: false
-        }).populate('recipientUserId', 'name');
+        // 2.5 Fetch Personal Transactions (Lend/Borrow)
+        const personalTx = isDummy
+            ? await Transaction.find({
+                recipientDummyId: new mongoose.Types.ObjectId(perspective.id),
+                $or: [{ type: 'lend' }, { type: 'borrow' }],
+                isSettled: false
+            }).populate('userId', 'name')
+            : await Transaction.find({
+                userId: userIdObj,
+                $or: [{ type: 'lend' }, { type: 'borrow' }],
+                isSettled: false
+            }).populate('recipientUserId', 'name').populate('recipientDummyId', 'name');
 
         // 0. Name-to-ID Mapping (Bucket Unification)
-        const groups = await mongoose.model('Group').find({ 'members.userId': userIdObj });
+        const groups = isDummy
+            ? await mongoose.model('Group').find({ 'members.dummyUserId': new mongoose.Types.ObjectId(perspective.id) })
+            : await mongoose.model('Group').find({ 'members.userId': userIdObj });
+
         const nameToId = {};
         groups.forEach(g => {
             g.members.forEach(m => {
@@ -68,11 +83,12 @@ exports.getSettlements = async (req, res) => {
         const initBalance = (id, name) => {
             if (!balances[id]) {
                 balances[id] = {
-                    userId: id.startsWith('guest:') ? null : id,
+                    userId: id.startsWith('guest:') || id.startsWith('dummy:') ? null : id,
                     guestName: id.startsWith('guest:') ? id.split(':')[1] : null,
+                    dummyId: id.startsWith('dummy:') ? id.split(':')[1] : null,
                     name: name,
                     total: 0,
-                    breakdown: [] // { type: 'group'|'personal', groupId?, groupName, amount }
+                    breakdown: []
                 };
             }
         };
@@ -176,24 +192,35 @@ exports.getSettlements = async (req, res) => {
 
         // Process Personal Transactions
         personalTx.forEach(tx => {
-            // Determine other party
             let otherId, otherName;
+            let amount;
 
-            if (tx.recipientUserId) {
-                const recipientObj = tx.recipientUserId;
-                otherId = getCanonicalKey(recipientObj, null);
-                otherName = recipientObj.name || recipientObj;
+            if (isDummy) {
+                // In dummy perspective, transactions are created by the owner (`userId`).
+                // Since the query filtered by `recipientDummyId == this dummy`, `userId` is the other person (the owner).
+                const ownerObj = tx.userId;
+                otherId = getCanonicalKey(ownerObj, null);
+                otherName = ownerObj ? ownerObj.name : 'Owner';
+
+                // If Owner lent 100 to Dummy, Dummy borrowed 100 from Owner. So Dummy owes Owner.
+                // Owner's type='lend' -> Dummy's type='borrow'.
+                // If Owner borrowed 100 from Dummy, Dummy lent 100 to Owner. So Owner owes Dummy.
+                amount = tx.type === 'lend' ? -tx.amount : tx.amount;
             } else {
-                return; // Should not happen for lend/borrow if correctly created
+                if (tx.recipientDummyId) {
+                    otherId = `dummy:${tx.recipientDummyId._id || tx.recipientDummyId}`;
+                    otherName = tx.recipientDummyId.name || 'Contact';
+                } else if (tx.recipientUserId) {
+                    const recipientObj = tx.recipientUserId;
+                    otherId = getCanonicalKey(recipientObj, null);
+                    otherName = recipientObj.name || recipientObj;
+                } else {
+                    return;
+                }
+
+                // Lend: I gave money. Active asset.
+                amount = tx.type === 'lend' ? tx.amount : -tx.amount;
             }
-
-            // Note: If I Lend 100, they owe me (+100).
-            // If I Borrow 100, I owe them (-100).
-
-            // However, Transaction stores `userId` as ME. 
-            // `type` determines direction.
-            // Lend: I gave money. Active asset.
-            const amount = tx.type === 'lend' ? tx.amount : -tx.amount;
 
             initBalance(otherId, otherName);
             updateBreakdown(otherId, 'personal', null, 'Personal Expenses', amount, tx._id.toString());
@@ -201,18 +228,47 @@ exports.getSettlements = async (req, res) => {
 
         // Skipped redundant legacy processing (merged above)
 
-        // Filter and Format
-        const result = Object.values(balances)
-            .filter(b => Math.abs(b.total) > 0.01) // Filter zero balances
+        return Object.values(balances);
+
+    } catch (err) {
+        console.error(err.message);
+        throw err;
+    }
+};
+
+exports.getSettlements = async (req, res) => {
+    try {
+        const balances = await calculateAllBalances(req);
+        const result = balances
+            .filter(b => Math.abs(b.total) > 0.01)
             .map(b => ({
                 userId: b.userId,
+                dummyId: b.dummyId,
                 name: b.name,
                 total: b.total,
                 breakdown: b.breakdown.filter(i => Math.abs(i.amount) > 0.01)
             }));
-
         res.json(result);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+};
 
+exports.getDummyBalances = async (req, res) => {
+    try {
+        const dummyUsers = await DummyUser.find({ createdBy: req.user.id });
+        const allBalances = [];
+
+        for (const dummy of dummyUsers) {
+            const perspective = { id: dummy._id.toString(), name: dummy.name };
+            const balancesForDummy = await calculateAllBalances(req, perspective);
+            allBalances.push({
+                contact: dummy,
+                balancesWithOthers: balancesForDummy.filter(b => Math.abs(b.total) > 0.01)
+            });
+        }
+        res.json(allBalances);
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server error');
@@ -284,7 +340,7 @@ exports.settleAll = async (req, res) => {
             }
         });
 
-        // Subtract existing settlements
+        // Subtract existing confirmed settlements
         const existingSettlements = await Settlement.find({
             $or: [
                 { fromUserId: fromUserId, toUserId: toUserId },
@@ -293,7 +349,8 @@ exports.settleAll = async (req, res) => {
                 { fromUserId: toUserId, toGuestName: fromUserName },
                 { fromUserId: fromUserId, toGuestName: userName },
                 { fromGuestName: userName, toUserId: fromUserId }
-            ]
+            ],
+            confirmed: true
         });
 
         existingSettlements.forEach(s => {
@@ -351,18 +408,193 @@ exports.settleAll = async (req, res) => {
     }
 };
 
-exports.createSettlement = async (req, res) => {
-    const { groupId, toUserId, toGuestName, amount } = req.body;
-    const fromUserId = req.user.id;
+exports.settleContact = async (req, res) => {
+    const { dummyId, guestName, otherUserId, otherGuestName } = req.body;
+
+    // The Contact (Dummy) is Party 1
+    const party1Name = guestName;
+
+    // The Other Entity is Party 2 (defaults to Current User if not provided)
+    const party2Id = otherGuestName ? null : (otherUserId || req.user.id);
+    let party2Name = otherGuestName || null;
+
+    if (party2Id && !party2Name) {
+        const currentUser = await User.findById(party2Id);
+        party2Name = currentUser ? currentUser.name : null;
+    }
 
     try {
+        // 1. Personal Transactions with DummyUser
+        if (dummyId && party2Id) {
+            const personalDebts = await Transaction.find({
+                userId: party2Id,
+                recipientDummyId: dummyId,
+                type: { $in: ['lend', 'borrow'] },
+                isSettled: false
+            });
+
+            for (let tx of personalDebts) {
+                tx.isSettled = true;
+                await tx.save();
+            }
+        }
+
+        // 2. Group Expenses
+        if (party1Name) {
+            const expensesQuery = {
+                $or: []
+            };
+
+            // Party 2 paid, Party 1 in splits
+            if (party2Id) expensesQuery.$or.push({ payerId: party2Id, 'splits.guestName': party1Name });
+            if (party2Name) expensesQuery.$or.push({ payerGuestName: party2Name, 'splits.guestName': party1Name });
+
+            // Party 1 paid, Party 2 in splits
+            if (party2Id) expensesQuery.$or.push({ payerGuestName: party1Name, 'splits.userId': party2Id });
+            if (party2Name) expensesQuery.$or.push({ payerGuestName: party1Name, 'splits.guestName': party2Name });
+
+            const expenses = await GroupExpense.find(expensesQuery).populate('groupId');
+
+            const groupBalances = {};
+
+            // Calculate
+            expenses.forEach(exp => {
+                if (!exp.groupId) return;
+                const gid = exp.groupId._id.toString();
+                if (!groupBalances[gid]) groupBalances[gid] = 0;
+
+                const party2Paid = (exp.payerId && party2Id && exp.payerId.toString() === party2Id.toString()) ||
+                    (exp.payerGuestName && party2Name && exp.payerGuestName === party2Name);
+
+                if (party2Paid) {
+                    // Party 2 paid, Party 1 owes Party 2.
+                    // From Party 2's perspective: Party 1 owes Party 2 (Positive for Party 2).
+                    // We need to decide perspective. Let's use Party 2's perspective for calculation,
+                    // just like original code used `fromUserId`'s perspective.
+                    const split = exp.splits.find(s => s.guestName === party1Name);
+                    if (split) groupBalances[gid] += split.amount;
+                } else if (exp.payerGuestName === party1Name) {
+                    // Party 1 paid, Party 2 owes Party 1.
+                    // From Party 2's perspective: Party 2 owes Party 1 (Negative for Party 2).
+                    const split = exp.splits.find(s =>
+                        (s.userId && party2Id && s.userId.toString() === party2Id.toString()) ||
+                        (s.guestName && party2Name && s.guestName === party2Name)
+                    );
+                    if (split) groupBalances[gid] -= split.amount;
+                }
+            });
+
+            // Subtract existing confirmed settlements
+            const settlementQuery = {
+                $or: [],
+                confirmed: true
+            };
+
+            if (party2Id) {
+                settlementQuery.$or.push(
+                    { fromUserId: party2Id, toGuestName: party1Name },
+                    { fromGuestName: party1Name, toUserId: party2Id }
+                );
+            }
+            if (party2Name) {
+                settlementQuery.$or.push(
+                    { fromGuestName: party2Name, toGuestName: party1Name },
+                    { fromGuestName: party1Name, toGuestName: party2Name }
+                );
+            }
+
+            const existingSettlements = await Settlement.find(settlementQuery);
+
+            existingSettlements.forEach(s => {
+                const gid = s.groupId ? s.groupId.toString() : 'general';
+                if (!groupBalances[gid]) groupBalances[gid] = 0;
+
+                const sFromId = s.fromUserId ? s.fromUserId.toString() : null;
+
+                if ((sFromId && party2Id && sFromId === party2Id.toString()) ||
+                    (s.fromGuestName && party2Name && s.fromGuestName === party2Name)) {
+                    // Party 2 paid previously. Reduced debt (add positive).
+                    groupBalances[gid] += s.amount;
+                } else if (s.fromGuestName === party1Name) {
+                    // Party 1 paid. Reduced credit (subtract).
+                    groupBalances[gid] -= s.amount;
+                }
+            });
+
+            // Create new Settlements
+            const settlementPromises = [];
+            for (const [gid, amount] of Object.entries(groupBalances)) {
+                if (Math.abs(amount) > 0.01) {
+                    let sFrom, sFromGuest, sTo, sToGuest, sAmount;
+
+                    if (amount > 0) {
+                        // Party 1 owes Party 2. Party 1 pays Party 2.
+                        sFrom = null;
+                        sFromGuest = party1Name;
+                        sTo = party2Id;
+                        sToGuest = party2Name;
+                        sAmount = amount;
+                    } else {
+                        // Party 2 owes Party 1. Party 2 pays Party 1.
+                        sFrom = party2Id;
+                        sFromGuest = party2Name;
+                        sTo = null;
+                        sToGuest = party1Name;
+                        sAmount = Math.abs(amount);
+                    }
+
+                    const newSettlement = new Settlement({
+                        groupId: gid === 'general' ? undefined : gid,
+                        fromUserId: sFrom,
+                        fromGuestName: sFromGuest,
+                        toUserId: sTo,
+                        toGuestName: sToGuest,
+                        amount: sAmount,
+                        confirmed: true
+                    });
+                    settlementPromises.push(newSettlement.save());
+                }
+            }
+
+            await Promise.all(settlementPromises);
+        }
+
+        res.json({ msg: 'Contact balances settled' });
+
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+};
+
+exports.createSettlement = async (req, res) => {
+    const { groupId, toUserId, toGuestName, fromUserId, fromGuestName, amount } = req.body;
+    const currentUserId = req.user.id;
+
+    try {
+        if (groupId) {
+            const group = await Group.findById(groupId);
+            if (group) {
+                const guestPartyName = fromGuestName || toGuestName;
+                if (guestPartyName) {
+                    const dummyMember = group.members.find(m =>
+                        m.dummyUserId && m.guestName && m.guestName.toLowerCase() === guestPartyName.toLowerCase()
+                    );
+                    if (dummyMember && dummyMember.addedBy && dummyMember.addedBy.toString() !== currentUserId) {
+                        return res.status(401).json({ msg: 'Only the contact owner can record settlements for this person' });
+                    }
+                }
+            }
+        }
+
         const newSettlement = new Settlement({
             groupId,
-            fromUserId,
-            toUserId,
-            toGuestName,
+            fromUserId: fromUserId || currentUserId,
+            fromGuestName: fromUserId ? undefined : (fromGuestName || undefined),
+            toUserId: toUserId || currentUserId,
+            toGuestName: toUserId ? undefined : (toGuestName || undefined),
             amount,
-            confirmed: true // For now, auto-confirm when manually added from group
+            confirmed: true
         });
 
         await newSettlement.save();
@@ -379,13 +611,24 @@ exports.getSettlementHistory = async (req, res) => {
         const user = await User.findById(userId);
         const userName = user ? user.name : null;
 
+        const dummies = await DummyUser.find({ createdBy: userId });
+        const dummyNames = dummies.map(d => d.name);
+
+        const orConditions = [
+            { fromUserId: userId },
+            { toUserId: userId },
+        ];
+
+        if (userName) {
+            orConditions.push({ fromGuestName: userName }, { toGuestName: userName });
+        }
+
+        for (const dName of dummyNames) {
+            orConditions.push({ fromGuestName: dName }, { toGuestName: dName });
+        }
+
         const history = await Settlement.find({
-            $or: [
-                { fromUserId: userId },
-                { toUserId: userId },
-                { fromGuestName: userName },
-                { toGuestName: userName }
-            ],
+            $or: orConditions,
             confirmed: true
         })
             .populate('fromUserId', 'name')

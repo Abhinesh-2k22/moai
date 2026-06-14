@@ -37,12 +37,12 @@ const Groups = () => {
         <div className="space-y-8 animate-fade-in">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-800">Groups</h1>
-                    <p className="text-gray-500 mt-1">Manage shared expenses with friends & family</p>
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Groups</h1>
+                    <p className="text-gray-500 dark:text-gray-400 mt-1">Manage shared expenses with friends & family</p>
                 </div>
                 <button
                     onClick={() => setIsCreating(true)}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-1"
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-1 cursor-pointer"
                 >
                     <Plus size={20} />
                     Create Group
@@ -51,11 +51,11 @@ const Groups = () => {
 
             {isCreating && (
                 <div className="glass-card p-6 rounded-2xl animate-slide-up">
-                    <h3 className="text-lg font-bold mb-4 text-gray-800">Create New Group</h3>
+                    <h3 className="text-lg font-bold mb-4 text-gray-800 dark:text-white">Create New Group</h3>
                     <form onSubmit={handleCreateGroup} className="flex gap-4">
                         <input
                             type="text"
-                            className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                            className="flex-1 px-4 py-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                             placeholder="Enter group name (e.g. 'Summer Trip')"
                             value={newGroupName}
                             onChange={(e) => setNewGroupName(e.target.value)}
@@ -63,14 +63,14 @@ const Groups = () => {
                         />
                         <button
                             type="submit"
-                            className="bg-emerald-600 text-white px-8 py-3 rounded-xl hover:bg-emerald-700 transition-all font-medium shadow-lg hover:shadow-emerald-500/30"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-xl transition-all font-medium shadow-lg hover:shadow-emerald-500/30 cursor-pointer"
                         >
                             Create
                         </button>
                         <button
                             type="button"
                             onClick={() => setIsCreating(false)}
-                            className="bg-gray-100 text-gray-700 px-8 py-3 rounded-xl hover:bg-gray-200 transition-all font-medium"
+                            className="bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 px-8 py-3 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-700 transition-all font-medium cursor-pointer"
                         >
                             Cancel
                         </button>
@@ -83,42 +83,42 @@ const Groups = () => {
                     <Link
                         key={group._id}
                         to={`/groups/${group._id}`}
-                        className="glass-card p-6 rounded-2xl hover:shadow-card-hover transition-all duration-300 group relative overflow-hidden border border-white/60"
+                        className="glass-card p-6 rounded-2xl hover:shadow-card-hover transition-all duration-300 group relative overflow-hidden border border-white/60 dark:border-slate-800/80"
                     >
                         <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                            <Users size={80} className="text-indigo-600" />
+                            <Users size={80} className="text-indigo-600 dark:text-indigo-400" />
                         </div>
 
                         <div className="flex justify-between items-start mb-6 relative z-10">
-                            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
+                            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
                                 <Users size={24} />
                             </div>
                             <span className={`px-3 py-1 text-xs font-bold rounded-full flex items-center gap-1 ${group.status === 'open'
-                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                    : 'bg-gray-100 text-gray-600 border border-gray-200'
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100/20'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-750/80'
                                 }`}>
                                 {group.status === 'open' ? <FolderOpen size={12} /> : <Lock size={12} />}
-                                {group.status.toUpperCase()}
+                                {group.status === 'open' ? 'ACTIVE' : 'FROZEN'}
                             </span>
                         </div>
 
-                        <h3 className="text-xl font-bold text-gray-800 mb-2 group-hover:text-indigo-600 transition-colors">{group.name}</h3>
-                        <p className="text-gray-500 text-sm mb-6 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-gray-300"></span>
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{group.name}</h3>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-slate-600"></span>
                             {group.members.length} Members
                         </p>
 
-                        <div className="flex items-center text-indigo-600 font-bold text-sm group-hover:gap-2 transition-all">
+                        <div className="flex items-center text-indigo-600 dark:text-indigo-400 font-bold text-sm group-hover:gap-2 transition-all">
                             View Details <ArrowRight size={16} className="ml-1" />
                         </div>
                     </Link>
                 ))}
 
                 {groups.length === 0 && !isCreating && (
-                    <div className="col-span-full py-12 text-center text-gray-400 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+                    <div className="col-span-full py-12 text-center text-gray-400 dark:text-gray-500 bg-gray-50/50 dark:bg-slate-900/20 rounded-2xl border border-dashed border-gray-200 dark:border-slate-800/80">
                         <div className="flex flex-col items-center gap-4">
-                            <div className="p-4 bg-white rounded-full shadow-sm">
-                                <Users size={32} className="text-gray-300" />
+                            <div className="p-4 bg-white dark:bg-slate-900 rounded-full shadow-sm">
+                                <Users size={32} className="text-gray-300 dark:text-gray-600" />
                             </div>
                             <p>No groups yet. Create one to start sharing expenses!</p>
                         </div>

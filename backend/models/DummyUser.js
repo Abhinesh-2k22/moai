@@ -5,6 +5,10 @@ const DummyUserSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    description: {
+        type: String,
+        default: ''
+    },
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -13,6 +17,10 @@ const DummyUserSchema = new mongoose.Schema({
     createdAt: {
         type: Date,
         default: Date.now
+    },
+    isDeleted: {
+        type: Boolean,
+        default: false
     }
 });
 

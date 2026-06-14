@@ -1,10 +1,10 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate, Link, Navigate } from 'react-router-dom';
-import { Wallet, ArrowRight } from 'lucide-react';
+import { Landmark, ArrowRight } from 'lucide-react';
 
 const Login = () => {
-    const [email, setEmail] = useState('');
+    const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const { login } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -18,7 +18,7 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await login(email, password);
+            await login(identifier, password);
             navigate('/');
         } catch (err) {
             setError('Invalid credentials');
@@ -26,44 +26,49 @@ const Login = () => {
     };
 
     return (
-        <div className="min-h-screen flex bg-gray-50">
+        <div className="min-h-screen flex bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
             {/* Left Side - Form */}
             <div className="w-full md:w-1/2 flex items-center justify-center p-8 animate-fade-in">
                 <div className="max-w-md w-full">
                     <div className="mb-8">
                         <div className="flex items-center gap-2 mb-2">
-                            <div className="bg-indigo-600 p-2 rounded-lg text-white">
-                                <Wallet size={24} />
+                            <div className="bg-indigo-600 p-2 rounded-lg text-white flex items-center justify-center">
+                                <Landmark size={24} />
                             </div>
-                            <span className="text-2xl font-bold text-gray-900">Moai</span>
+                            <span className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Moai Finance</span>
                         </div>
-                        <h2 className="text-4xl font-bold text-gray-900 mb-2">Welcome back</h2>
-                        <p className="text-gray-500">Please enter your details to sign in.</p>
+                        <h2 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">Welcome back</h2>
+                        <p className="text-gray-500 dark:text-gray-400">Please enter your details to sign in.</p>
                     </div>
 
                     {error && (
-                        <div className="bg-rose-50 border border-rose-100 text-rose-600 p-4 rounded-xl mb-6 text-sm font-medium">
+                        <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 p-4 rounded-xl mb-6 text-sm font-medium">
                             {error}
                         </div>
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email or Username</label>
                             <input
-                                type="email"
-                                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                                placeholder="Enter your email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                type="text"
+                                className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white outline-none transition-all"
+                                placeholder="Enter your email or username"
+                                value={identifier}
+                                onChange={(e) => setIdentifier(e.target.value)}
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                            <div className="flex justify-between items-center mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
+                                <Link to="/forgot-password" className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline">
+                                    Forgot password?
+                                </Link>
+                            </div>
                             <input
                                 type="password"
-                                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                                className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white outline-none transition-all"
                                 placeholder="••••••••"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -73,7 +78,7 @@ const Login = () => {
 
                         <button
                             type="submit"
-                            className="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 flex items-center justify-center gap-2 group"
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/30 flex items-center justify-center gap-2 group cursor-pointer"
                         >
                             Sign in
                             <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
@@ -81,9 +86,9 @@ const Login = () => {
                     </form>
 
                     <div className="mt-8 text-center">
-                        <p className="text-gray-600">
+                        <p className="text-gray-600 dark:text-gray-400">
                             Don't have an account?{' '}
-                            <Link to="/register" className="text-indigo-600 font-semibold hover:text-indigo-700 hover:underline">
+                            <Link to="/register" className="text-indigo-600 dark:text-indigo-400 font-semibold hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline">
                                 Sign up for free
                             </Link>
                         </p>
@@ -109,3 +114,4 @@ const Login = () => {
 };
 
 export default Login;
+

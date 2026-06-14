@@ -21,6 +21,7 @@ mongoose.connect(process.env.MONGO_URI)
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.use('/api/categories', require('./routes/categoryRoutes'));
+app.use('/api/payment-methods', require('./routes/paymentMethodRoutes'));
 app.use('/api/groups', require('./routes/groupRoutes'));
 app.use('/api/settlements', require('./routes/settlementRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));

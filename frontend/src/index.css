@@ -2,6 +2,8 @@
 
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
@@ -12,6 +14,12 @@ body {
   min-height: 100vh;
   background-color: #f8fafc;
   color: #1e293b;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.dark body {
+  background-color: #0f172a;
+  color: #f8fafc;
 }
 
 @layer utilities {
@@ -20,6 +28,12 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.18);
+    transition: background-color 0.3s, border-color 0.3s;
+  }
+
+  .dark .glass {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .glass-card {
@@ -27,6 +41,13 @@ body {
     backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.5);
     box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+    transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .dark .glass-card {
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
   }
 
   .gradient-bg {

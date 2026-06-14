@@ -29,10 +29,13 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
     const [recipientInput, setRecipientInput] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [selectedRecipient, setSelectedRecipient] = useState(null); // {id, name, type: 'user'|'dummy' }
+    const [paymentMethods, setPaymentMethods] = useState([]);
+    const [paymentMethodId, setPaymentMethodId] = useState('');
 
     useEffect(() => {
         if (isOpen) {
             fetchCategories();
+            fetchPaymentMethods();
             if (type === 'lend' || type === 'borrow') {
                 fetchUsers();
                 fetchDummyUsers();
@@ -62,6 +65,17 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
         try {
             const res = await api.get('/users/dummy');
             setDummyUsers(res.data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const fetchPaymentMethods = async () => {
+        try {
+            const res = await api.get('/payment-methods/ensure-defaults');
+            setPaymentMethods(res.data);
+            const unspecified = res.data.find(m => m.name === 'Unspecified');
+            if (unspecified) setPaymentMethodId(unspecified._id);
         } catch (err) {
             console.error(err);
         }
@@ -164,6 +178,12 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
                 payload.category = category;
             }
 
+            if (type !== 'lend' && type !== 'borrow' && paymentMethodId) {
+                const pm = paymentMethods.find(m => m._id === paymentMethodId);
+                payload.paymentMethodId = paymentMethodId;
+                payload.paymentMethodName = pm?.name || 'Unspecified';
+            }
+
             await api.post('/transactions', payload);
             onTransactionAdded();
             onClose();
@@ -207,49 +227,49 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
     const suggestions = getSuggestions();
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-            <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl transform transition-all scale-100 max-h-[90vh] overflow-y-auto border border-gray-100 dark:border-slate-800/80">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Add Transaction</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
+                    <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Add Transaction</h2>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors text-gray-500 dark:text-gray-450 cursor-pointer">
                         <X size={24} />
                     </button>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                     {/* Type Selection */}
-                    <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 dark:bg-slate-950 rounded-xl">
                         <button
                             type="button"
-                            className={`py-2.5 rounded-lg font-bold text-sm transition-all ${type === 'expense' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`py-2.5 rounded-lg font-bold text-sm transition-all cursor-pointer ${type === 'expense' ? 'bg-white dark:bg-slate-800 text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
                             onClick={() => setType('expense')}
                         >
                             Expense
                         </button>
                         <button
                             type="button"
-                            className={`py-2.5 rounded-lg font-bold text-sm transition-all ${type === 'income' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`py-2.5 rounded-lg font-bold text-sm transition-all cursor-pointer ${type === 'income' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
                             onClick={() => setType('income')}
                         >
                             Income
                         </button>
                         <button
                             type="button"
-                            className={`py-2.5 rounded-lg font-bold text-sm transition-all ${type === 'investment' ? 'bg-white text-amber-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`py-2.5 rounded-lg font-bold text-sm transition-all cursor-pointer ${type === 'investment' ? 'bg-white dark:bg-slate-800 text-amber-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
                             onClick={() => setType('investment')}
                         >
                             Investment
                         </button>
                         <button
                             type="button"
-                            className={`py-2.5 rounded-lg font-bold text-sm transition-all ${type === 'lend' ? 'bg-white text-pink-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`py-2.5 rounded-lg font-bold text-sm transition-all cursor-pointer ${type === 'lend' ? 'bg-white dark:bg-slate-800 text-pink-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
                             onClick={() => setType('lend')}
                         >
                             Lend
                         </button>
                         <button
                             type="button"
-                            className={`col-span-2 py-2.5 rounded-lg font-bold text-sm transition-all ${type === 'borrow' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`col-span-2 py-2.5 rounded-lg font-bold text-sm transition-all cursor-pointer ${type === 'borrow' ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
                             onClick={() => setType('borrow')}
                         >
                             Borrow
@@ -258,17 +278,17 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
 
                     {/* Investment Type */}
                     {type === 'investment' && (
-                        <div className="flex p-1 bg-gray-100 rounded-xl">
+                        <div className="flex p-1 bg-gray-100 dark:bg-slate-950 rounded-xl">
                             <button
                                 type="button"
-                                className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all ${investmentType === 'buy' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all cursor-pointer ${investmentType === 'buy' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
                                 onClick={() => setInvestmentType('buy')}
                             >
                                 Buy
                             </button>
                             <button
                                 type="button"
-                                className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all ${investmentType === 'sell' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                className={`flex-1 py-2.5 rounded-lg font-bold text-sm transition-all cursor-pointer ${investmentType === 'sell' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
                                 onClick={() => setInvestmentType('sell')}
                             >
                                 Sell
@@ -279,12 +299,12 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
                     {/* Recipient Selection for Lend/Borrow */}
                     {isLendBorrow && (
                         <div className="relative">
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">
                                 {type === 'lend' ? 'Lend To' : 'Borrow From'}
                             </label>
                             <input
                                 type="text"
-                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                                className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-205 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 text-gray-900 dark:text-white outline-none transition-all"
                                 placeholder="Type person's name..."
                                 value={recipientInput}
                                 onChange={(e) => {
@@ -296,16 +316,16 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
                                 required
                             />
                             {showSuggestions && suggestions.length > 0 && (
-                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                                <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl shadow-lg max-h-48 overflow-y-auto">
                                     {suggestions.map((suggestion, idx) => (
                                         <button
                                             key={idx}
                                             type="button"
                                             onClick={() => handleRecipientSelect(suggestion)}
-                                            className="w-full px-4 py-2 text-left hover:bg-indigo-50 transition-colors flex items-center justify-between"
+                                            className="w-full px-4 py-2.5 text-left hover:bg-indigo-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between cursor-pointer"
                                         >
-                                            <span className="text-sm text-gray-800">{suggestion.name}</span>
-                                            <span className={`text-xs px-2 py-0.5 rounded-full ${suggestion.type === 'user' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`}>
+                                            <span className="text-sm text-gray-800 dark:text-gray-200">{suggestion.name}</span>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full ${suggestion.type === 'user' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-400'}`}>
                                                 {suggestion.type === 'user' ? 'User' : 'Contact'}
                                             </span>
                                         </button>
@@ -313,14 +333,14 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
                                 </div>
                             )}
                             {recipientInput && !selectedRecipient && (
-                                <div className="mt-1">
+                                <div className="mt-1.5">
                                     {user && user.name.toLowerCase() === recipientInput.trim().toLowerCase() ? (
-                                        <p className="text-xs text-rose-500 italic">
+                                        <p className="text-xs text-rose-500 dark:text-rose-400 italic">
                                             You cannot {type} with yourself.
                                         </p>
                                     ) : !users.some(u => u.name.toLowerCase() === recipientInput.trim().toLowerCase()) &&
                                         !dummyUsers.some(d => d.name.toLowerCase() === recipientInput.trim().toLowerCase()) ? (
-                                        <p className="text-xs text-gray-500 italic">
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 italic">
                                             Will be saved as a new contact
                                         </p>
                                     ) : null}
@@ -331,12 +351,12 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
 
                     {/* Amount */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Amount</label>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Amount</label>
                         <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 font-bold">₹</span>
                             <input
                                 type="number"
-                                className="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all font-bold text-lg text-gray-800"
+                                className="w-full pl-8 pr-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-205 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 outline-none transition-all font-bold text-lg text-gray-800 dark:text-white"
                                 required
                                 min="0"
                                 step="0.01"
@@ -350,7 +370,7 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
                     {/* Category (not for lend/borrow) */}
                     {!isLendBorrow && (
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Category</label>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Category</label>
                             {!isAddingCategory ? (
                                 <div className="flex gap-2">
                                     <CategoryDropdown
@@ -363,7 +383,7 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
                                     <button
                                         type="button"
                                         onClick={() => setIsAddingCategory(true)}
-                                        className="px-4 bg-indigo-100 text-indigo-600 rounded-xl hover:bg-indigo-200 transition-colors font-bold text-xl flex-shrink-0"
+                                        className="px-4 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors font-bold text-xl flex-shrink-0 cursor-pointer"
                                     >
                                         +
                                     </button>
@@ -372,7 +392,7 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
-                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                                        className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-205 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 outline-none text-gray-900 dark:text-white transition-all"
                                         placeholder="New Category Name"
                                         value={newCategory}
                                         onChange={(e) => setNewCategory(e.target.value)}
@@ -381,14 +401,14 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
                                     <button
                                         type="button"
                                         onClick={handleAddCategory}
-                                        className="px-4 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors"
+                                        className="px-4 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors cursor-pointer"
                                     >
                                         <Check size={20} />
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setIsAddingCategory(false)}
-                                        className="px-4 bg-gray-200 text-gray-600 rounded-xl hover:bg-gray-300 transition-colors"
+                                        className="px-4 bg-gray-200 dark:bg-slate-800 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-300 dark:hover:bg-slate-705 transition-colors cursor-pointer"
                                     >
                                         <X size={20} />
                                     </button>
@@ -397,12 +417,27 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
                         </div>
                     )}
 
+                    {!isLendBorrow && (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Payment Method</label>
+                            <select
+                                className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-250 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 outline-none text-gray-900 dark:text-white transition-all select-none"
+                                value={paymentMethodId}
+                                onChange={(e) => setPaymentMethodId(e.target.value)}
+                            >
+                                {paymentMethods.map(pm => (
+                                    <option key={pm._id} value={pm._id} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">{pm.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     {/* Date */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Date & Time</label>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Date & Time</label>
                         <input
                             type="datetime-local"
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                            className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-250 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 outline-none text-gray-900 dark:text-white transition-all"
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
                             required
@@ -411,10 +446,10 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
 
                     {/* Description */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Description</label>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Description</label>
                         <input
                             type="text"
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                            className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-255 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 outline-none text-gray-900 dark:text-white transition-all"
                             placeholder="What was this for?"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
@@ -423,7 +458,7 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
 
                     <button
                         type="submit"
-                        className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 mt-2"
+                        className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 dark:shadow-none mt-2 cursor-pointer"
                     >
                         Save Transaction
                     </button>

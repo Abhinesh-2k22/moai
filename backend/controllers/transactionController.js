@@ -1,39 +1,50 @@
 const Transaction = require('../models/Transaction');
 const GroupExpense = require('../models/GroupExpense');
+const GroupExpenseUserMeta = require('../models/GroupExpenseUserMeta');
 const mongoose = require('mongoose');
 
-// Get all transactions for user
 exports.getTransactions = async (req, res) => {
     try {
-        // 1. Fetch Personal Transactions
         const transactions = await Transaction.find({ userId: req.user.id }).lean();
 
-        // 2. Fetch Group Expenses where user is involved
         const groupExpenses = await GroupExpense.find({ 'splits.userId': req.user.id })
             .populate('groupId', 'name')
             .populate('payerId', 'name')
             .lean();
 
-        // 3. Transform Group Expenses into Transaction-like objects
+        const geIds = groupExpenses.map(ge => ge._id);
+        const metaList = await GroupExpenseUserMeta.find({
+            userId: req.user.id,
+            groupExpenseId: { $in: geIds }
+        }).lean();
+        const metaMap = {};
+        metaList.forEach(m => {
+            metaMap[m.groupExpenseId.toString()] = m;
+        });
+
         const groupTxns = groupExpenses.map(ge => {
             const mySplit = ge.splits.find(s => s.userId && s.userId.toString() === req.user.id);
             const amount = mySplit ? mySplit.amount : 0;
             const groupName = ge.groupId ? ge.groupId.name : 'Unknown Group';
+            const meta = metaMap[ge._id.toString()];
 
             return {
-                _id: ge._id, // Use GE ID
+                _id: ge._id,
                 userId: req.user.id,
                 amount: amount,
                 type: 'expense',
-                category: 'Group Expense',
+                category: meta?.category || 'Group Expense',
                 description: `${ge.description} (Group: ${groupName})`,
                 date: ge.date,
                 isGroupExpense: true,
-                payerName: ge.payerId ? ge.payerId.name : ge.payerGuestName
+                groupExpenseId: ge._id,
+                groupId: ge.groupId ? ge.groupId._id : null,
+                payerName: ge.payerId ? ge.payerId.name : ge.payerGuestName,
+                paymentMethodId: meta?.paymentMethodId,
+                paymentMethodName: meta?.paymentMethodName || 'Unspecified'
             };
         });
 
-        // 4. Merge and Sort
         const allTransactions = [...transactions, ...groupTxns].sort((a, b) => new Date(b.date) - new Date(a.date));
 
         res.json(allTransactions);
@@ -43,13 +54,15 @@ exports.getTransactions = async (req, res) => {
     }
 };
 
-// Add new transaction
 exports.addTransaction = async (req, res) => {
-    const { amount, type, category, description, date, investmentType, recipientUserId } = req.body;
+    const { amount, type, category, description, date, investmentType, recipientUserId, recipientDummyId, paymentMethodId, paymentMethodName } = req.body;
 
     try {
-        // Handle lend/borrow transactions
         if (type === 'lend' || type === 'borrow') {
+            if (!recipientUserId && !recipientDummyId) {
+                return res.status(400).json({ msg: 'Recipient is required' });
+            }
+
             const txData = {
                 userId: req.user.id,
                 amount,
@@ -57,13 +70,25 @@ exports.addTransaction = async (req, res) => {
                 description,
                 date,
                 status: 'confirmed',
-                recipientUserId
+                category: type === 'lend' ? 'Lending' : 'Borrowing',
+                paymentMethodName: paymentMethodName || 'Unspecified'
             };
+
+            if (recipientDummyId) {
+                txData.recipientDummyId = recipientDummyId;
+            } else {
+                txData.recipientUserId = recipientUserId;
+            }
+
+            if (paymentMethodId) txData.paymentMethodId = paymentMethodId;
 
             const newTransaction = new Transaction(txData);
             const transaction = await newTransaction.save();
 
-            // Create reciprocal transaction
+            if (recipientDummyId) {
+                return res.json(transaction);
+            }
+
             const reciprocalType = type === 'lend' ? 'borrow' : 'lend';
             const reciprocalTxData = {
                 userId: recipientUserId,
@@ -73,20 +98,20 @@ exports.addTransaction = async (req, res) => {
                 date,
                 status: 'confirmed',
                 linkedTransactionId: transaction._id,
-                recipientUserId: req.user.id
+                recipientUserId: req.user.id,
+                category: reciprocalType === 'lend' ? 'Lending' : 'Borrowing',
+                paymentMethodName: 'Unspecified'
             };
 
             const reciprocalTx = new Transaction(reciprocalTxData);
             await reciprocalTx.save();
 
-            // Link back
             transaction.linkedTransactionId = reciprocalTx._id;
             await transaction.save();
 
             return res.json(transaction);
         }
 
-        // Regular transactions (income, expense, investment)
         const newTransaction = new Transaction({
             userId: req.user.id,
             amount,
@@ -94,7 +119,9 @@ exports.addTransaction = async (req, res) => {
             category,
             description,
             date,
-            investmentType
+            investmentType,
+            paymentMethodId: paymentMethodId || undefined,
+            paymentMethodName: paymentMethodName || 'Unspecified'
         });
 
         const transaction = await newTransaction.save();
@@ -105,7 +132,6 @@ exports.addTransaction = async (req, res) => {
     }
 };
 
-// Settle Transaction (Mark as Settled)
 exports.settleTransaction = async (req, res) => {
     try {
         const transaction = await Transaction.findById(req.params.id);
@@ -118,11 +144,9 @@ exports.settleTransaction = async (req, res) => {
             return res.status(401).json({ msg: 'Not authorized' });
         }
 
-        // Mark as settled
         transaction.isSettled = true;
         await transaction.save();
 
-        // Mark linked transaction as settled if exists
         if (transaction.linkedTransactionId) {
             const linkedTx = await Transaction.findById(transaction.linkedTransactionId);
             if (linkedTx) {
@@ -138,29 +162,30 @@ exports.settleTransaction = async (req, res) => {
     }
 };
 
-// Delete transaction
 exports.deleteTransaction = async (req, res) => {
     try {
         const transaction = await Transaction.findById(req.params.id);
 
-        if (!transaction) {
-            return res.status(404).json({ msg: 'Transaction not found' });
+        if (transaction) {
+            if (transaction.userId.toString() !== req.user.id) {
+                return res.status(401).json({ msg: 'User not authorized' });
+            }
+            await transaction.deleteOne();
+            return res.json({ msg: 'Transaction removed' });
         }
 
-        // Ensure user owns transaction
-        if (transaction.userId.toString() !== req.user.id) {
-            return res.status(401).json({ msg: 'User not authorized' });
+        const groupExpense = await GroupExpense.findById(req.params.id);
+        if (groupExpense) {
+            return res.status(400).json({ msg: 'Group expenses must be deleted from the group page' });
         }
 
-        await transaction.deleteOne();
-        res.json({ msg: 'Transaction removed' });
+        return res.status(404).json({ msg: 'Transaction not found' });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server error');
     }
 };
 
-// Get Analysis Data
 exports.getAnalysis = async (req, res) => {
     try {
         const income = await Transaction.aggregate([

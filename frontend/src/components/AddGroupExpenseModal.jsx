@@ -1,19 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import api from '../api/axios';
+import { AuthContext } from '../context/AuthContext';
+import { getMemberId, getMemberLabel } from '../utils/groupMembers';
+import CategoryDropdown from './CategoryDropdown';
 import { X, DollarSign, Users, FileText, Calendar } from 'lucide-react';
 
 const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseToEdit }) => {
+    const { user } = useContext(AuthContext);
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [payerId, setPayerId] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [loading, setLoading] = useState(false);
     const [selectedMemberIds, setSelectedMemberIds] = useState([]);
+    const [category, setCategory] = useState('');
+    const [paymentMethodId, setPaymentMethodId] = useState('');
+    const [categories, setCategories] = useState([]);
+    const [paymentMethods, setPaymentMethods] = useState([]);
 
     const isEditing = !!expenseToEdit;
 
     useEffect(() => {
         if (isOpen && group) {
+            fetchCategoriesAndPaymentMethods();
             if (isEditing) {
                 // Edit Mode: Pre-fill data
                 setDescription(expenseToEdit.description);
@@ -35,17 +44,61 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                 resetForm();
 
                 // Default select all
-                const allIds = group.members.map(m => m.userId ? m.userId._id : `guest:${m.guestName}`);
+                const allIds = group.members.map(m => getMemberId(m));
                 setSelectedMemberIds(allIds);
 
                 // Default pay
                 if (group.members.length > 0) {
                     const firstMember = group.members[0];
-                    setPayerId(firstMember.userId ? firstMember.userId._id : `guest:${firstMember.guestName}`);
+                    setPayerId(getMemberId(firstMember));
                 }
             }
         }
     }, [isOpen, group, expenseToEdit]);
+
+    const fetchCategoriesAndPaymentMethods = async () => {
+        try {
+            const [catRes, pmRes] = await Promise.all([
+                api.get('/categories'),
+                api.get('/payment-methods/ensure-defaults')
+            ]);
+            setCategories(catRes.data.filter(c => c.type === 'expense'));
+            setPaymentMethods(pmRes.data);
+            const unspecified = pmRes.data.find(m => m.name === 'Unspecified');
+            if (unspecified) setPaymentMethodId(unspecified._id);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const isPayerMe = () => {
+        if (!payerId || !user) return false;
+        if (payerId === user.id) return true;
+        if (payerId.startsWith('guest:')) {
+            const guestName = payerId.split(':')[1];
+            const myMember = group.members.find(m =>
+                m.userId && m.userId._id === user.id && m.guestName === guestName
+            );
+            return !!myMember;
+        }
+        return false;
+    };
+
+    const isMeInvolved = () => {
+        if (!user) return false;
+        if (isPayerMe()) return true;
+        return selectedMemberIds.some(id => {
+            if (id === user.id) return true;
+            if (id.startsWith('guest:')) {
+                const guestName = id.split(':')[1];
+                const myMember = group.members.find(m =>
+                    m.userId && m.userId._id === user.id && m.guestName === guestName
+                );
+                return !!myMember;
+            }
+            return false;
+        });
+    };
 
     const handleToggleMember = (id) => {
         if (selectedMemberIds.includes(id)) {
@@ -82,10 +135,16 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                 const id = isGuest ? null : memberId;
                 const guestName = isGuest ? memberId.split(':')[1] : null;
 
+                let splitAmountForMember = splitAmount;
+                if (index === selectedMemberIds.length - 1) {
+                    const assigned = splitAmount * (splitCount - 1);
+                    splitAmountForMember = parseFloat((totalAmount - assigned).toFixed(2));
+                }
+
                 return {
                     userId: id,
                     guestName: guestName,
-                    amount: splitAmount // Simple split for now
+                    amount: splitAmountForMember
                 };
             });
 
@@ -106,6 +165,14 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
             if (isEditing) {
                 await api.put(`/groups/${group._id}/expenses/${expenseToEdit._id}`, payload);
             } else {
+                if (isMeInvolved() && (category || paymentMethodId)) {
+                    const pm = paymentMethods.find(m => m._id === paymentMethodId);
+                    payload.userMeta = {
+                        category: category || undefined,
+                        paymentMethodId: paymentMethodId || undefined,
+                        paymentMethodName: pm?.name || 'Unspecified'
+                    };
+                }
                 await api.post(`/groups/${group._id}/expenses`, payload);
             }
 
@@ -121,11 +188,11 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-            <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl transform transition-all scale-100 max-h-[90vh] overflow-y-auto border border-gray-100 dark:border-slate-800/80">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">{isEditing ? 'Edit Expense' : 'Add Group Expense'}</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
+                    <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{isEditing ? 'Edit Expense' : 'Add Group Expense'}</h2>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors text-gray-500 dark:text-gray-455 cursor-pointer">
                         <X size={24} />
                     </button>
                 </div>
@@ -133,13 +200,13 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                 <form onSubmit={handleSubmit} className="space-y-5">
                     {/* Description */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Description</label>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Description</label>
                         <div className="relative">
-                            <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                            <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
                             <input
                                 type="text"
                                 required
-                                className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                                className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 text-gray-900 dark:text-white outline-none transition-all"
                                 placeholder="Dinner, Taxi, etc."
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
@@ -149,15 +216,15 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
 
                     {/* Amount */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Total Amount</label>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Total Amount</label>
                         <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 font-bold">₹</span>
                             <input
                                 type="number"
                                 required
                                 min="0.01"
                                 step="0.01"
-                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all font-bold text-lg text-gray-800"
+                                className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 outline-none transition-all font-bold text-lg text-gray-800 dark:text-white"
                                 placeholder="0.00"
                                 value={amount}
                                 onChange={(e) => setAmount(e.target.value)}
@@ -167,21 +234,21 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
 
                     {/* Paid By */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Paid By</label>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Paid By</label>
                         <div className="relative">
-                            <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                            <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
                             <select
                                 required
-                                className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all appearance-none"
+                                className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 outline-none transition-all appearance-none text-gray-900 dark:text-white"
                                 value={payerId}
                                 onChange={(e) => setPayerId(e.target.value)}
                             >
-                                <option value="" disabled>Select Payer</option>
+                                <option value="" disabled className="bg-white dark:bg-slate-900 text-gray-400 dark:text-gray-500">Select Payer</option>
                                 {group.members.map((member, idx) => {
-                                    const value = member.userId ? member.userId._id : `guest:${member.guestName}`;
-                                    const label = member.userId ? member.userId.name : `${member.guestName} (Guest)`;
+                                    const value = getMemberId(member);
+                                    const label = getMemberLabel(member, user?.id);
                                     return (
-                                        <option key={idx} value={value}>
+                                        <option key={idx} value={value} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">
                                             {label}
                                         </option>
                                     );
@@ -193,53 +260,80 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                     {/* Split With */}
                     <div>
                         <div className="flex justify-between items-center mb-1.5">
-                            <label className="block text-xs font-bold text-gray-500 uppercase">Split With</label>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Split With</label>
                             <div className="flex gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => setSelectedMemberIds(group.members.map(m => m.userId ? m.userId._id : `guest:${m.guestName}`))}
-                                    className="text-xs text-indigo-600 font-bold hover:text-indigo-800"
+                                    onClick={() => setSelectedMemberIds(group.members.map(m => getMemberId(m)))}
+                                    className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:text-indigo-800 dark:hover:text-indigo-300 cursor-pointer"
                                 >
                                     All
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setSelectedMemberIds([])}
-                                    className="text-xs text-gray-400 hover:text-gray-600"
+                                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer"
                                 >
                                     Clear
                                 </button>
                             </div>
                         </div>
-                        <div className="bg-gray-50 rounded-xl p-3 border border-gray-200 space-y-2 max-h-40 overflow-y-auto">
+                        <div className="bg-gray-50 dark:bg-slate-950 rounded-xl p-3 border border-gray-200 dark:border-slate-800 space-y-2 max-h-40 overflow-y-auto">
                             {group.members.map((member, idx) => {
-                                const id = member.userId ? member.userId._id : `guest:${member.guestName}`;
-                                const name = member.userId ? member.userId.name : `${member.guestName} (Guest)`;
+                                const id = getMemberId(member);
+                                const name = getMemberLabel(member, user?.id);
                                 const isSelected = selectedMemberIds.includes(id);
                                 return (
                                     <div key={idx}
-                                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-gray-100'}`}
+                                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors border ${isSelected ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-100 dark:border-indigo-900/50' : 'hover:bg-gray-100 dark:hover:bg-slate-900 border-transparent'}`}
                                         onClick={() => handleToggleMember(id)}
                                     >
-                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 bg-white'}`}>
+                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900'}`}>
                                             {isSelected && <Users size={12} className="text-white" />}
                                         </div>
-                                        <span className={`text-sm font-medium ${isSelected ? 'text-indigo-700' : 'text-gray-600'}`}>{name}</span>
+                                        <span className={`text-sm font-medium ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400'}`}>{name}</span>
                                     </div>
                                 );
                             })}
                         </div>
                     </div>
 
+                    {!isEditing && isMeInvolved() && (
+                        <>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Your Category (private)</label>
+                                <CategoryDropdown
+                                    categories={categories}
+                                    value={category}
+                                    onChange={setCategory}
+                                    type="expense"
+                                    allowFavoriteToggle={false}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Payment Method (private)</label>
+                                <select
+                                    className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white transition-all"
+                                    value={paymentMethodId}
+                                    onChange={(e) => setPaymentMethodId(e.target.value)}
+                                >
+                                    {paymentMethods.map(pm => (
+                                        <option key={pm._id} value={pm._id} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">{pm.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </>
+                    )}
+
                     {/* Date */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Date</label>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Date</label>
                         <div className="relative">
-                            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
                             <input
                                 type="date"
                                 required
-                                className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                                className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 outline-none transition-all text-gray-900 dark:text-white"
                                 value={date}
                                 onChange={(e) => setDate(e.target.value)}
                             />
@@ -249,7 +343,7 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 dark:shadow-none mt-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                     >
                         {loading ? 'Processing...' : (isEditing ? 'Update Expense' : 'Split Expense')}
                     </button>

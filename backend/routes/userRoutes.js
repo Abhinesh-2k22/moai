@@ -23,4 +23,24 @@ router.get('/dummy', auth, userController.getDummyUsers);
 // @access  Private
 router.post('/dummy', auth, userController.createDummyUser);
 
+// @route   PUT /api/users/dummy/:id
+// @desc    Update a contact
+// @access  Private
+router.put('/dummy/:id', auth, userController.updateDummyUser);
+
+// @route   DELETE /api/users/dummy/:id
+// @desc    Delete a contact
+// @access  Private
+router.delete('/dummy/:id', auth, userController.deleteDummyUser);
+
+// @route   PUT /api/users/profile
+// @desc    Update profile (name & base64 avatar)
+// @access  Private
+router.put('/profile', auth, userController.updateProfile);
+
+// @route   GET /api/users/:id/avatar
+// @desc    Get user's avatar image (public)
+// @access  Public
+router.get('/:id/avatar', userController.getAvatar);
+
 module.exports = router;

@@ -15,9 +15,16 @@ const GroupSchema = new mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User'
         },
-        // If userId is null, it's a guest member
         guestName: {
             type: String
+        },
+        dummyUserId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'DummyUser'
+        },
+        addedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
         },
         joinedAt: {
             type: Date,

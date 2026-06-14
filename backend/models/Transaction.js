@@ -35,7 +35,9 @@ const TransactionSchema = new mongoose.Schema({
     recipientUserId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: function () { return ['lend', 'borrow'].includes(this.type); }
+        required: function () {
+            return ['lend', 'borrow'].includes(this.type) && !this.recipientDummyId;
+        }
     },
     recipientDummyId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -60,6 +62,14 @@ const TransactionSchema = new mongoose.Schema({
         type: String,
         enum: ['none', 'requested', 'confirmed'],
         default: 'none'
+    },
+    paymentMethodId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'PaymentMethod'
+    },
+    paymentMethodName: {
+        type: String,
+        default: 'Unspecified'
     }
 }, { timestamps: true });
 

@@ -11,5 +11,6 @@ router.post('/', auth, groupController.createGroup);
 router.get('/', auth, groupController.getGroups);
 router.get('/:id', auth, groupController.getGroup);
 router.post('/:id/members', auth, groupController.addMember);
+router.patch('/:id/status', auth, groupController.updateGroupStatus);
 
 module.exports = router;

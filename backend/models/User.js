@@ -19,6 +19,19 @@ const UserSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    profilePic: {
+        data: {
+            type: Buffer,
+            select: false
+        },
+        contentType: String
+    },
+    resetOtp: {
+        type: String
+    },
+    resetOtpExpires: {
+        type: Date
+    },
     createdAt: {
         type: Date,
         default: Date.now
