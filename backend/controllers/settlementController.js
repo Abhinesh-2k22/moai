@@ -191,8 +191,6 @@ const calculateAllBalances = async (req, perspective = null) => {
             }
         });
 
-        // Skip the separate settlements loop below as we unified it above
-
         // Process Personal Transactions
         personalTx.forEach(tx => {
             let otherId, otherName;
@@ -228,8 +226,6 @@ const calculateAllBalances = async (req, perspective = null) => {
             initBalance(otherId, otherName);
             updateBreakdown(otherId, 'personal', null, 'Personal Expenses', amount, tx._id.toString());
         });
-
-        // Skipped redundant legacy processing (merged above)
 
         return Object.values(balances);
 
