@@ -1,8 +1,6 @@
 const Transaction = require('../models/Transaction');
 const GroupExpense = require('../models/GroupExpense');
 const GroupExpenseUserMeta = require('../models/GroupExpenseUserMeta');
-const Settlement = require('../models/Settlement');
-const DummyUser = require('../models/DummyUser');
 const mongoose = require('mongoose');
 
 exports.getTransactions = async (req, res) => {

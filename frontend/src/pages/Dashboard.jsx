@@ -33,7 +33,6 @@ const Dashboard = () => {
             const settlementsData = settleRes.data;
 
             setTransactions(allTransactions);
-            // settlements history is only used in the Settlements page - no need to store here
 
             // Calculate totals for CURRENT MONTH only
             const now = new Date();
@@ -94,7 +93,7 @@ const Dashboard = () => {
         }
     };
 
-    // Calculate lifetime balance from ALL transactions
+    // Calculate lifetime balance from all transactions
     const calculateLifetimeBalance = () => {
         let balance = 0;
         transactions.forEach(tx => {
@@ -104,30 +103,9 @@ const Dashboard = () => {
                 if (tx.investmentType === 'buy') balance -= tx.amount;
                 else if (tx.investmentType === 'sell') balance += tx.amount;
             }
-            // Lend/Borrow don't affect "Net Balance" in the same way as income/expense, 
-            // but usually:
-            // Lend = Money out (temporarily) -> decreases available cash? 
-            // Borrow = Money in (temporarily) -> increases available cash?
-            // However, standard Net Worth usually includes money owed to you.
-            // For "Wallet Balance" (Cash on hand):
             // Lend reduces cash, Borrow increases cash.
-            // Let's assume this is "Net Worth" (Assets - Liabilities)?
-            // Or "Cash Flow"?
-            // Based on previous logic `summary.income - summary.expense`, it was Cash Flow.
-            // Let's stick to Cash Flow logic:
-            // Income (+), Expense (-), Invest Buy (-), Invest Sell (+)
-            // Lend (-), Borrow (+)
-
-            // WAIT: The previous logic was: income - expense - investBuy + investSell.
-            // It ignored Lend/Borrow.
-            // If I lend money, my "Net Worth" doesn't change (Cash goes down, Asset "IOU" goes up).
-            // But my "Wallet Balance" goes down.
-            // The user asked for "Balance". Usually means "Current Balance".
-            // If I borrow 100, I have 100 more cash.
-            // If I lend 100, I have 100 less cash.
-            // Let's include Lend/Borrow in the cash balance for accuracy.
-
-            if (tx.type === 'lend' && !tx.isSettled) balance -= tx.amount;
+            // Only count unsettled debts — settled ones cancel out.
+            else if (tx.type === 'lend' && !tx.isSettled) balance -= tx.amount;
             else if (tx.type === 'borrow' && !tx.isSettled) balance += tx.amount;
         });
 
