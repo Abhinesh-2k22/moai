@@ -3,8 +3,12 @@ const mongoose = require('mongoose');
 const SettlementSchema = new mongoose.Schema({
     groupId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Group',
-        required: true
+        ref: 'Group'
+    },
+    type: {
+        type: String,
+        enum: ['group', 'personal'],
+        default: 'group'
     },
     fromUserId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -23,6 +27,10 @@ const SettlementSchema = new mongoose.Schema({
     amount: {
         type: Number,
         required: true
+    },
+    paymentMethodId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'PaymentMethod'
     },
     date: {
         type: Date,

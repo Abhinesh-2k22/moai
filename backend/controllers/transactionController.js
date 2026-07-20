@@ -1,6 +1,8 @@
 const Transaction = require('../models/Transaction');
 const GroupExpense = require('../models/GroupExpense');
 const GroupExpenseUserMeta = require('../models/GroupExpenseUserMeta');
+const Settlement = require('../models/Settlement');
+const DummyUser = require('../models/DummyUser');
 const mongoose = require('mongoose');
 
 exports.getTransactions = async (req, res) => {
@@ -134,6 +136,7 @@ exports.addTransaction = async (req, res) => {
 
 exports.settleTransaction = async (req, res) => {
     try {
+        const { paymentMethodId, paymentMethodName } = req.body || {};
         const transaction = await Transaction.findById(req.params.id);
 
         if (!transaction) {
@@ -144,7 +147,12 @@ exports.settleTransaction = async (req, res) => {
             return res.status(401).json({ msg: 'Not authorized' });
         }
 
+        if (transaction.isSettled) {
+            return res.status(400).json({ msg: 'Transaction is already settled' });
+        }
+
         transaction.isSettled = true;
+
         await transaction.save();
 
         if (transaction.linkedTransactionId) {

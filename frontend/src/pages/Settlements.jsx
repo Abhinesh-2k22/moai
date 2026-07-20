@@ -3,6 +3,7 @@ import api from '../api/axios';
 import { AuthContext } from '../context/AuthContext';
 import { ArrowUpRight, ArrowDownLeft, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
+import ConfirmSettlementModal from '../components/ConfirmSettlementModal';
 
 const Settlements = () => {
     const { user } = useContext(AuthContext);
@@ -12,9 +13,28 @@ const Settlements = () => {
     const [activeTab, setActiveTab] = useState('settle'); // 'settle' or 'expect'
     const [expandedUsers, setExpandedUsers] = useState({});
 
+    // Settle Modal State
+    const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
+    const [settleData, setSettleData] = useState(null);
+    const [settlePaymentMethodId, setSettlePaymentMethodId] = useState('');
+    const [paymentMethods, setPaymentMethods] = useState([]);
+    const [modalLoading, setModalLoading] = useState(false);
+
     useEffect(() => {
         fetchSettlements();
+        fetchPaymentMethods();
     }, []);
+
+    const fetchPaymentMethods = async () => {
+        try {
+            const res = await api.get('/payment-methods/ensure-defaults');
+            setPaymentMethods(res.data);
+            const unspecified = res.data.find(m => m.name === 'Unspecified');
+            if (unspecified) setSettlePaymentMethodId(unspecified._id);
+        } catch (err) {
+            console.error(err);
+        }
+    };
 
     const fetchSettlements = async () => {
         try {
@@ -40,40 +60,62 @@ const Settlements = () => {
         }
     };
 
-    const handleSettleAll = async (otherUserId, name, amount) => {
-        if (!otherUserId) return;
-        if (!window.confirm(`Settle all balances with ${name}? Net amount: ₹${Math.abs(amount).toFixed(2)}`)) return;
-
-        try {
-            await api.post('/settlements/settle-all', {
-                toUserId: otherUserId,
-                userName: name
-            });
-            fetchSettlements();
-            alert('Settled successfully!');
-        } catch (err) {
-            console.error(err);
-            alert('Failed to settle balances');
-        }
+    const openSettleModal = (item) => {
+        setSettleData(item);
+        setIsSettleModalOpen(true);
     };
 
-    const handleSettleContact = async (item) => {
-        if (item.dummyId) {
-            if (!window.confirm(`Mark all personal debts with ${item.name} as settled?`)) return;
-            try {
-                const personalEntries = item.breakdown.filter(b => b.type === 'personal' && b.transactionIds);
+    const handleConfirmSettle = async () => {
+        if (!settleData) return;
+        setModalLoading(true);
+
+        const pm = paymentMethods.find(m => m._id === settlePaymentMethodId);
+        const paymentMethodName = pm ? pm.name : 'Unspecified';
+
+        try {
+            if (settleData.dummyId) {
+                // Personal dummy settling — settle all transactions first
+                const personalEntries = settleData.breakdown.filter(b => b.type === 'personal' && b.transactionIds);
                 for (const entry of personalEntries) {
                     for (const txId of entry.transactionIds) {
-                        await api.put(`/transactions/${txId}/settle`);
+                        await api.put(`/transactions/${txId}/settle`, {
+                            paymentMethodId: settlePaymentMethodId || undefined,
+                            paymentMethodName
+                        });
                     }
                 }
+
+                // Create ONE consolidated Settlement record for history
+                const iOwe = settleData.total < 0; // negative = I owe the contact
+                await api.post('/settlements', {
+                    type: 'personal',
+                    fromGuestName: iOwe ? user?.name : settleData.name,
+                    toGuestName: iOwe ? settleData.name : user?.name,
+                    amount: Math.abs(settleData.total),
+                    paymentMethodId: settlePaymentMethodId || undefined,
+                    confirmed: true
+                });
+
                 fetchSettlements();
-                alert('Settled successfully!');
-            } catch (err) {
-                alert('Failed to settle');
+                setIsSettleModalOpen(false);
+                setSettleData(null);
+            } else {
+                // User-to-user settling — settle-all creates one Settlement record internally
+                await api.post('/settlements/settle-all', {
+                    toUserId: settleData.userId,
+                    userName: settleData.name,
+                    paymentMethodId: settlePaymentMethodId || undefined,
+                    paymentMethodName
+                });
+                fetchSettlements();
+                setIsSettleModalOpen(false);
+                setSettleData(null);
             }
-        } else {
-            handleSettleAll(item.userId, item.name, item.total);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to settle');
+        } finally {
+            setModalLoading(false);
         }
     };
 
@@ -168,7 +210,7 @@ const Settlements = () => {
                                             {/* Stop propagation to avoid toggling when clicking action */}
                                             <div onClick={(e) => e.stopPropagation()}>
                                                 <button
-                                                    onClick={() => handleSettleContact(item)}
+                                                    onClick={() => openSettleModal(item)}
                                                     className={`p-3 rounded-full transition-all shadow-sm cursor-pointer ${activeTab === 'settle'
                                                         ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-950/70'
                                                         : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-950/70'}`}
@@ -212,7 +254,9 @@ const Settlements = () => {
                         <div className="space-y-4">
                             {(() => {
                                 const displayedHistory = history.filter(item => {
-                                    const amIPayer = (item.fromUserId && item.fromUserId._id === user?.id) || (item.fromGuestName && !item.fromUserId);
+                                    const myId = (user?._id || user?.id)?.toString();
+                                    const fromUserIdStr = item.fromUserId ? (item.fromUserId._id || item.fromUserId).toString() : null;
+                                    const amIPayer = (fromUserIdStr && fromUserIdStr === myId) || (item.fromGuestName === user?.name);
                                     return activeTab === 'settle' ? amIPayer : !amIPayer;
                                 });
 
@@ -225,8 +269,10 @@ const Settlements = () => {
                                 }
 
                                 return displayedHistory.map(item => {
-                                    const amIPayer = (item.fromUserId && item.fromUserId._id === user?.id) || (item.fromGuestName && !item.fromUserId); 
-                                    // Approximation for guest matching
+                                    const myId = (user?._id || user?.id)?.toString();
+                                    const fromUserIdStr = item.fromUserId ? (item.fromUserId._id || item.fromUserId).toString() : null;
+                                    const amIPayer = (fromUserIdStr && fromUserIdStr === myId) || (item.fromGuestName === user?.name);
+                                    
                                     const otherPerson = amIPayer ? 
                                         (item.toUserId ? item.toUserId.name : item.toGuestName) : 
                                         (item.fromUserId ? item.fromUserId.name : item.fromGuestName);
@@ -266,6 +312,22 @@ const Settlements = () => {
                     </>
                 )}
             </div>
+
+            <ConfirmSettlementModal
+                isOpen={isSettleModalOpen && settleData !== null}
+                onClose={() => {
+                    setIsSettleModalOpen(false);
+                    setSettleData(null);
+                }}
+                onConfirm={handleConfirmSettle}
+                title="Settle Up"
+                message={`You are about to record a settlement of ₹${Math.abs(settleData?.total || 0).toFixed(2)} with ${settleData?.name}.`}
+                amount={settleData?.total || 0}
+                paymentMethods={paymentMethods}
+                paymentMethodId={settlePaymentMethodId}
+                setPaymentMethodId={setSettlePaymentMethodId}
+                loading={modalLoading}
+            />
         </div>
     );
 };

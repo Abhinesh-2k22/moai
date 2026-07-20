@@ -4,6 +4,7 @@ import api from '../api/axios';
 import { AuthContext } from '../context/AuthContext';
 import AddGroupExpenseModal from '../components/AddGroupExpenseModal';
 import TagGroupExpenseModal from '../components/TagGroupExpenseModal';
+import ConfirmSettlementModal from '../components/ConfirmSettlementModal';
 import { getMemberLabel, getMemberInitial } from '../utils/groupMembers';
 import { Plus, UserPlus, Clock, ArrowUpRight, ArrowDownLeft, Wallet, X, Pencil, Trash2, Lock, Unlock, Tag } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -30,9 +31,38 @@ const GroupDetail = () => {
     const [searchResults, setSearchResults] = useState([]);
     const [showDropdown, setShowDropdown] = useState(false);
 
-    // Date Filters
+    // Settlement Modal State
+    const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
+    const [settleData, setSettleData] = useState(null);
+    const [settlePaymentMethodId, setSettlePaymentMethodId] = useState('');
+    const [paymentMethods, setPaymentMethods] = useState([]);
+
+    // Date and Sort Filters
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [filterPaidBy, setFilterPaidBy] = useState('');
+    const [filterSplitWith, setFilterSplitWith] = useState('');
+
+    const filteredExpenses = expenses.filter(exp => {
+        let matchPaidBy = true;
+        let matchSplitWith = true;
+
+        if (filterPaidBy) {
+            const payerKey = exp.payerId ? exp.payerId._id : `guest:${exp.payerGuestName}`;
+            if (payerKey !== filterPaidBy) {
+                matchPaidBy = false;
+            }
+        }
+
+        if (filterSplitWith) {
+            const splitKeys = exp.splits.map(s => s.userId ? s.userId._id : `guest:${s.guestName}`);
+            if (!splitKeys.includes(filterSplitWith)) {
+                matchSplitWith = false;
+            }
+        }
+
+        return matchPaidBy && matchSplitWith;
+    });
 
     useEffect(() => {
         fetchGroupData();
@@ -44,6 +74,21 @@ const GroupDetail = () => {
             fetchContacts();
         }
     }, [isAddingMember]);
+
+    const fetchPaymentMethods = async () => {
+        try {
+            const res = await api.get('/payment-methods/ensure-defaults');
+            setPaymentMethods(res.data);
+            const unspecified = res.data.find(m => m.name === 'Unspecified');
+            if (unspecified) setSettlePaymentMethodId(unspecified._id);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    useEffect(() => {
+        fetchPaymentMethods();
+    }, []);
 
     const fetchContacts = async () => {
         try {
@@ -115,11 +160,14 @@ const GroupDetail = () => {
         }
     };
 
-    const handleSettleUp = async (otherUserId, otherGuestName, amount, theyPaidMe = false) => {
-        const action = theyPaidMe
-            ? `Record that you received ₹${amount.toFixed(2)}?`
-            : `Confirm payment of ₹${amount.toFixed(2)}?`;
-        if (!window.confirm(action)) return;
+    const initiateSettleUp = (otherUserId, otherGuestName, amount, theyPaidMe = false) => {
+        setSettleData({ otherUserId, otherGuestName, amount, theyPaidMe });
+        setIsSettleModalOpen(true);
+    };
+
+    const executeSettleUp = async () => {
+        if (!settleData) return;
+        const { otherUserId, otherGuestName, amount, theyPaidMe } = settleData;
 
         try {
             if (theyPaidMe) {
@@ -127,17 +175,21 @@ const GroupDetail = () => {
                     groupId: id,
                     fromUserId: otherUserId || undefined,
                     fromGuestName: otherGuestName || undefined,
-                    amount
+                    amount,
+                    paymentMethodId: settlePaymentMethodId || undefined
                 });
             } else {
                 await api.post('/settlements', {
                     groupId: id,
                     toUserId: otherUserId || undefined,
                     toGuestName: otherGuestName || undefined,
-                    amount
+                    amount,
+                    paymentMethodId: settlePaymentMethodId || undefined
                 });
             }
             fetchGroupData();
+            setIsSettleModalOpen(false);
+            setSettleData(null);
         } catch (err) {
             alert(err.response?.data?.msg || 'Failed to record settlement');
         }
@@ -401,7 +453,7 @@ const GroupDetail = () => {
                                         <p className="text-xs text-gray-400 dark:text-gray-500">{b.amount >= 0 ? 'gets back' : 'owes'}</p>
                                         {canSettle && (
                                             <button
-                                                onClick={() => handleSettleUp(toUserId, toGuestName, Math.abs(relative), relative > 0)}
+                                                onClick={() => initiateSettleUp(toUserId, toGuestName, Math.abs(relative), relative > 0)}
                                                 className="text-xs px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium cursor-pointer"
                                             >
                                                 {relative < 0 ? `Pay ₹${Math.abs(relative).toFixed(2)}` : `Record ₹${relative.toFixed(2)} received`}
@@ -426,7 +478,7 @@ const GroupDetail = () => {
                             Expense History
                             <span className="text-sm font-normal text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{expenses.length}</span>
                             <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-full ml-2">
-                                Total: ₹{expenses.reduce((acc, curr) => acc + curr.amount, 0).toFixed(2)}
+                                Total: ₹{filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0).toFixed(2)}
                             </span>
                         </h2>
                         <div className="flex flex-wrap items-center gap-2">
@@ -468,12 +520,35 @@ const GroupDetail = () => {
                                     onChange={(e) => setEndDate(e.target.value)}
                                     title="End Date"
                                 />
-
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <select 
+                                    className="text-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                    value={filterPaidBy}
+                                    onChange={(e) => setFilterPaidBy(e.target.value)}
+                                >
+                                    <option value="">Paid By: All</option>
+                                    {group?.members.map((m, idx) => {
+                                        const val = m.userId ? m.userId._id : `guest:${m.guestName}`;
+                                        return <option key={`p-${idx}`} value={val}>{getMemberLabel(m, user.id)}</option>;
+                                    })}
+                                </select>
+                                <select 
+                                    className="text-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                    value={filterSplitWith}
+                                    onChange={(e) => setFilterSplitWith(e.target.value)}
+                                >
+                                    <option value="">Split With: All</option>
+                                    {group?.members.map((m, idx) => {
+                                        const val = m.userId ? m.userId._id : `guest:${m.guestName}`;
+                                        return <option key={`s-${idx}`} value={val}>{getMemberLabel(m, user.id)}</option>;
+                                    })}
+                                </select>
                             </div>
                         </div>
                     </div>
                     <div className="space-y-3">
-                        {expenses.map((exp) => (
+                        {filteredExpenses.map((exp) => (
                             <div key={exp._id} className="glass-card p-5 rounded-xl hover:shadow-md transition-all group border border-gray-100 dark:border-slate-850 relative">
                                 <div className="absolute top-4 right-4 flex gap-2">
                                     {!isFrozen && (
@@ -564,6 +639,8 @@ const GroupDetail = () => {
                                                 </div>
 
                                                 {/* Tooltip Popup */}
+                                                {activeSplitPopup === null && false}
+
                                                 {activeSplitPopup === exp._id && (
                                                     <div 
                                                         className="absolute left-0 bottom-full mb-2 w-56 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl p-4 shadow-xl z-30 animate-fade-in text-left cursor-default"
@@ -647,6 +724,11 @@ const GroupDetail = () => {
                                 </div>
                             </div>
                         ))}
+                        {filteredExpenses.length === 0 && expenses.length > 0 && (
+                            <div className="text-center py-12 text-gray-400 dark:text-gray-500 bg-gray-50/20 dark:bg-slate-900/20 rounded-xl border border-dashed border-gray-200 dark:border-slate-800/80">
+                                No expenses match your filters.
+                            </div>
+                        )}
                         {expenses.length === 0 && (
                             <div className="text-center py-12 text-gray-400 dark:text-gray-500 bg-gray-50/20 dark:bg-slate-900/20 rounded-xl border border-dashed border-gray-200 dark:border-slate-800/80">
                                 <div className="flex flex-col items-center gap-3">
@@ -677,9 +759,21 @@ const GroupDetail = () => {
                 existingMeta={taggingExpense ? expenseMeta[taggingExpense._id] : null}
                 onSaved={fetchGroupData}
             />
+
+            <ConfirmSettlementModal
+                isOpen={isSettleModalOpen && settleData !== null}
+                onClose={() => setIsSettleModalOpen(false)}
+                onConfirm={executeSettleUp}
+                title="Settle Up"
+                message={`You are about to record a settlement of ₹${settleData?.amount.toFixed(2)} to ${settleData?.toName}.`}
+                amount={settleData?.amount || 0}
+                paymentMethods={paymentMethods}
+                paymentMethodId={settlePaymentMethodId}
+                setPaymentMethodId={setSettlePaymentMethodId}
+                loading={false}
+            />
         </div>
     );
 };
 
 export default GroupDetail;
-

@@ -38,6 +38,7 @@ const Analysis = () => {
     const [groupFilter, setGroupFilter] = useState('all');
     const [paymentMethods, setPaymentMethods] = useState([]);
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
+    const [selectedTxIds, setSelectedTxIds] = useState([]);
 
     useEffect(() => {
         fetchData();
@@ -123,6 +124,7 @@ const Analysis = () => {
         }
 
         setFilteredTransactions(result);
+        setSelectedTxIds(result.map(tx => tx._id));
     };
 
     // Re-run filters when filter state changes
@@ -1021,8 +1023,8 @@ const Analysis = () => {
                                 Showing {filteredTransactions.length} transactions
                             </div>
                             <div className="bg-indigo-50 dark:bg-indigo-950/30 px-3 py-1 rounded-lg text-indigo-700 dark:text-indigo-400">
-                                Net Total: <span className="font-bold">
-                                    ₹{filteredTransactions.reduce((acc, tx) => {
+                                Selected Total: <span className="font-bold">
+                                    ₹{filteredTransactions.filter(tx => selectedTxIds.includes(tx._id)).reduce((acc, tx) => {
                                         if (tx.category === 'Debt Repayment') return acc;
                                         if (tx.type === 'income' || (tx.type === 'investment' && tx.investmentType === 'sell') || tx.type === 'borrow') {
                                             return acc + tx.amount;
@@ -1042,6 +1044,20 @@ const Analysis = () => {
                         <table className="w-full">
                             <thead className="bg-gray-50/50 dark:bg-slate-900/50 sticky top-0 z-10 backdrop-blur-sm border-b border-gray-100 dark:border-slate-800">
                                 <tr>
+                                    <th className="px-6 py-4 text-left">
+                                        <input 
+                                            type="checkbox" 
+                                            className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                            checked={filteredTransactions.length > 0 && selectedTxIds.length === filteredTransactions.length}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedTxIds(filteredTransactions.map(tx => tx._id));
+                                                } else {
+                                                    setSelectedTxIds([]);
+                                                }
+                                            }}
+                                        />
+                                    </th>
                                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
                                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
                                     <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Category</th>
@@ -1053,7 +1069,7 @@ const Analysis = () => {
                             <tbody className="divide-y divide-gray-100 dark:divide-slate-800/80">
                                 {filteredTransactions.length === 0 ? (
                                     <tr>
-                                        <td colSpan="6" className="px-6 py-12 text-center text-gray-400 dark:text-gray-500">
+                                        <td colSpan="7" className="px-6 py-12 text-center text-gray-400 dark:text-gray-500">
                                             <div className="flex flex-col items-center gap-3">
                                                 <div className="p-4 bg-gray-50 dark:bg-slate-900/50 rounded-full">
                                                     <Filter size={32} />
@@ -1065,6 +1081,20 @@ const Analysis = () => {
                                 ) : (
                                     filteredTransactions.map((tx) => (
                                         <tr key={tx._id} className="hover:bg-gray-50/80 dark:hover:bg-slate-800/30 transition duration-200">
+                                            <td className="px-6 py-4">
+                                                <input 
+                                                    type="checkbox"
+                                                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                                    checked={selectedTxIds.includes(tx._id)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedTxIds([...selectedTxIds, tx._id]);
+                                                        } else {
+                                                            setSelectedTxIds(selectedTxIds.filter(id => id !== tx._id));
+                                                        }
+                                                    }}
+                                                />
+                                            </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
                                                 <div className="flex items-center gap-2">
                                                     <Calendar size={16} className="text-gray-400 dark:text-gray-500" />

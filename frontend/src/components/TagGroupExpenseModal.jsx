@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import api from '../api/axios';
 import CategoryDropdown from './CategoryDropdown';
+import { AuthContext } from '../context/AuthContext';
 import { X } from 'lucide-react';
 
 const TagGroupExpenseModal = ({ isOpen, onClose, expense, groupId, existingMeta, onSaved }) => {
+    const { user } = useContext(AuthContext);
     const [category, setCategory] = useState('');
     const [paymentMethodId, setPaymentMethodId] = useState('');
     const [categories, setCategories] = useState([]);
     const [paymentMethods, setPaymentMethods] = useState([]);
     const [loading, setLoading] = useState(false);
+
+    const isPayerMe = expense && user && (
+        expense.payerId === user.id || 
+        (expense.payerId && expense.payerId._id === user.id)
+    );
 
     useEffect(() => {
         if (isOpen) {
@@ -75,18 +82,20 @@ const TagGroupExpenseModal = ({ isOpen, onClose, expense, groupId, existingMeta,
                             allowFavoriteToggle={false}
                         />
                     </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Payment Method</label>
-                        <select
-                            className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white transition-all"
-                            value={paymentMethodId}
-                            onChange={(e) => setPaymentMethodId(e.target.value)}
-                        >
-                            {paymentMethods.map(pm => (
-                                <option key={pm._id} value={pm._id} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">{pm.name}</option>
-                            ))}
-                        </select>
-                    </div>
+                    {isPayerMe && (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Payment Method</label>
+                            <select
+                                className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white transition-all"
+                                value={paymentMethodId}
+                                onChange={(e) => setPaymentMethodId(e.target.value)}
+                            >
+                                {paymentMethods.map(pm => (
+                                    <option key={pm._id} value={pm._id} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">{pm.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     <button
                         type="submit"
                         disabled={loading}

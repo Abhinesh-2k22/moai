@@ -29,7 +29,7 @@ const calculateAllBalances = async (req, perspective = null) => {
             ]
         }).populate('groupId', 'name').populate('payerId', 'name').populate('splits.userId', 'name');
 
-        // 2. Fetch confirmed settlements
+        // 2. Fetch confirmed GROUP settlements only (personal settlements are handled by isSettled flag on transactions)
         const settlements = await Settlement.find({
             $or: [
                 { fromUserId: isDummy ? null : userIdObj },
@@ -37,7 +37,8 @@ const calculateAllBalances = async (req, perspective = null) => {
                 { fromGuestName: userName },
                 { toGuestName: userName }
             ],
-            confirmed: true
+            confirmed: true,
+            type: { $ne: 'personal' }
         }).populate('fromUserId', 'name').populate('toUserId', 'name');
 
         // 2.5 Fetch Personal Transactions (Lend/Borrow)
@@ -157,6 +158,8 @@ const calculateAllBalances = async (req, perspective = null) => {
 
         // Adjust for Settlements (canonical keys)
         settlements.forEach(settle => {
+            if (settle.type === 'personal') return;
+
             const fromKey = getCanonicalKey(settle.fromUserId, settle.fromGuestName);
             const toKey = getCanonicalKey(settle.toUserId, settle.toGuestName);
             const groupId = settle.groupId ? (settle.groupId._id || settle.groupId).toString() : null;
@@ -277,7 +280,7 @@ exports.getDummyBalances = async (req, res) => {
 
 // Settle All Balances with a User
 exports.settleAll = async (req, res) => {
-    const { toUserId, userName } = req.body; // userName comes from frontend Settlements.jsx
+    const { toUserId, userName, paymentMethodId, paymentMethodName } = req.body; // userName comes from frontend Settlements.jsx
     const fromUserId = req.user.id;
     // We also need the current user's name to match them as a Guest in other records
     const currentUser = await User.findById(fromUserId);
@@ -285,19 +288,72 @@ exports.settleAll = async (req, res) => {
 
     try {
         // 1. Personal Transactions
+        // Only fetch fromUser's own transactions to avoid double-counting linked pairs.
+        // Each lend/borrow pair has a linkedTransactionId — we settle both sides here.
         const personalTxQuery = {
+            userId: fromUserId,
             $or: [
-                { userId: fromUserId, recipientUserId: toUserId },
-                { userId: toUserId, recipientUserId: fromUserId }
+                { recipientUserId: toUserId }
             ],
             type: { $in: ['lend', 'borrow'] },
             isSettled: false
         };
-        const personalDebts = await Transaction.find(personalTxQuery);
+
+        // Also catch transactions where toUserId created the lend/borrow directed at fromUserId
+        // but with no linked transaction (i.e., toUser created a standalone lend to fromUser)
+        const partnerTxQuery = {
+            userId: toUserId,
+            recipientUserId: fromUserId,
+            type: { $in: ['lend', 'borrow'] },
+            isSettled: false,
+            linkedTransactionId: { $exists: false }  // only unlinked ones (linked ones are covered by fromUser side)
+        };
+
+        const [myDebts, partnerStandaloneDebts] = await Promise.all([
+            Transaction.find(personalTxQuery),
+            Transaction.find(partnerTxQuery)
+        ]);
+
+        const personalDebts = [...myDebts, ...partnerStandaloneDebts];
+
+        let personalNetAmount = 0; // positive = fromUser owes toUser, negative = toUser owes fromUser
 
         for (let tx of personalDebts) {
             tx.isSettled = true;
             await tx.save();
+
+            // Also settle the linked counterpart if it exists
+            if (tx.linkedTransactionId) {
+                const linkedTx = await Transaction.findById(tx.linkedTransactionId);
+                if (linkedTx && !linkedTx.isSettled) {
+                    linkedTx.isSettled = true;
+                    await linkedTx.save();
+                }
+            }
+
+            // Accumulate net personal amount (from fromUser's perspective)
+            const iAmCreator = tx.userId.toString() === fromUserId;
+            const isBorrow = tx.type === 'borrow';
+            const iOwe = (iAmCreator && isBorrow) || (!iAmCreator && !isBorrow);
+            if (iOwe) {
+                personalNetAmount += tx.amount; // fromUser owes
+            } else {
+                personalNetAmount -= tx.amount; // toUser owes fromUser
+            }
+        }
+
+        // Create ONE consolidated Settlement record for the personal debt history
+        if (personalDebts.length > 0 && Math.abs(personalNetAmount) > 0.01) {
+            const iOweNet = personalNetAmount > 0;
+            const consolidatedSettlement = new Settlement({
+                type: 'personal',
+                fromUserId: iOweNet ? fromUserId : toUserId,
+                toUserId: iOweNet ? toUserId : fromUserId,
+                amount: Math.abs(personalNetAmount),
+                paymentMethodId: paymentMethodId || undefined,
+                confirmed: true
+            });
+            await consolidatedSettlement.save();
         }
 
         // 2. Group Expenses
@@ -340,7 +396,7 @@ exports.settleAll = async (req, res) => {
             }
         });
 
-        // Subtract existing confirmed settlements
+        // Subtract existing confirmed GROUP settlements (exclude personal type)
         const existingSettlements = await Settlement.find({
             $or: [
                 { fromUserId: fromUserId, toUserId: toUserId },
@@ -350,7 +406,8 @@ exports.settleAll = async (req, res) => {
                 { fromUserId: fromUserId, toGuestName: userName },
                 { fromGuestName: userName, toUserId: fromUserId }
             ],
-            confirmed: true
+            confirmed: true,
+            type: { $ne: 'personal' }
         });
 
         existingSettlements.forEach(s => {
@@ -388,10 +445,11 @@ exports.settleAll = async (req, res) => {
                 }
 
                 const newSettlement = new Settlement({
-                    groupId: gid,
+                    groupId: gid === 'general' ? undefined : gid,
                     fromUserId: sFrom,
                     toUserId: sTo,
                     amount: sAmount,
+                    paymentMethodId: paymentMethodId,
                     confirmed: true
                 });
                 settlementPromises.push(newSettlement.save());
@@ -487,7 +545,8 @@ exports.settleContact = async (req, res) => {
             // Subtract existing confirmed settlements
             const settlementQuery = {
                 $or: [],
-                confirmed: true
+                confirmed: true,
+                type: { $ne: 'personal' }
             };
 
             if (party2Id) {
@@ -568,7 +627,7 @@ exports.settleContact = async (req, res) => {
 };
 
 exports.createSettlement = async (req, res) => {
-    const { groupId, toUserId, toGuestName, fromUserId, fromGuestName, amount } = req.body;
+    const { groupId, toUserId, toGuestName, fromUserId, fromGuestName, amount, paymentMethodId, type } = req.body;
     const currentUserId = req.user.id;
 
     try {
@@ -589,11 +648,13 @@ exports.createSettlement = async (req, res) => {
 
         const newSettlement = new Settlement({
             groupId,
+            type: type || 'group',
             fromUserId: fromUserId || currentUserId,
             fromGuestName: fromUserId ? undefined : (fromGuestName || undefined),
             toUserId: toUserId || currentUserId,
             toGuestName: toUserId ? undefined : (toGuestName || undefined),
             amount,
+            paymentMethodId,
             confirmed: true
         });
 

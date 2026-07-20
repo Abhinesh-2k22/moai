@@ -16,7 +16,6 @@ const Dashboard = () => {
         lend: 0,
         borrow: 0
     });
-    const [settlements, setSettlements] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     useEffect(() => {
@@ -25,18 +24,16 @@ const Dashboard = () => {
 
     const fetchData = async () => {
         try {
-            const [txRes, settleRes, historyRes] = await Promise.all([
+            const [txRes, settleRes] = await Promise.all([
                 api.get('/transactions'),
-                api.get('/settlements'),
-                api.get('/settlements/history')
+                api.get('/settlements')
             ]);
 
             const allTransactions = txRes.data;
             const settlementsData = settleRes.data;
-            const settlementHistory = historyRes.data;
 
             setTransactions(allTransactions);
-            setSettlements(settlementHistory);
+            // settlements history is only used in the Settlements page - no need to store here
 
             // Calculate totals for CURRENT MONTH only
             const now = new Date();
@@ -130,24 +127,9 @@ const Dashboard = () => {
             // If I lend 100, I have 100 less cash.
             // Let's include Lend/Borrow in the cash balance for accuracy.
 
-            if (tx.type === 'lend') balance -= tx.amount;
-            else if (tx.type === 'borrow') balance += tx.amount;
+            if (tx.type === 'lend' && !tx.isSettled) balance -= tx.amount;
+            else if (tx.type === 'borrow' && !tx.isSettled) balance += tx.amount;
         });
-
-        // Adjust for Verified Settlements (Repayments)
-        if (user) {
-            const userId = (user._id || user.id)?.toString();
-            settlements.forEach(settle => {
-                const fromIdStr = (settle.fromUserId?._id || settle.fromUserId || (settle.fromGuestName === user.name ? userId : null))?.toString();
-                const toIdStr = (settle.toUserId?._id || settle.toUserId || (settle.toGuestName === user.name ? userId : null))?.toString();
-
-                if (fromIdStr === userId) {
-                    balance -= settle.amount;
-                } else if (toIdStr === userId) {
-                    balance += settle.amount;
-                }
-            });
-        }
 
         return balance;
     };
@@ -301,9 +283,7 @@ const Dashboard = () => {
                                                     tx.type === 'borrow' ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-100/20' :
                                                     'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-100/20'
                                                 }`}>
-                                                    {tx.type === 'lend' ? 'Lent' :
-                                                        tx.type === 'borrow' ? 'Borrowed' :
-                                                            tx.category || tx.type}
+                                                    {tx.type === 'lend' ? 'Lent' : tx.type === 'borrow' ? 'Borrowed' : tx.category || tx.type}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 dark:text-gray-200 font-medium">

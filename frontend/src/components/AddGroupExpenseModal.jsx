@@ -10,13 +10,15 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [payerId, setPayerId] = useState('');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
     const [loading, setLoading] = useState(false);
     const [selectedMemberIds, setSelectedMemberIds] = useState([]);
     const [category, setCategory] = useState('');
     const [paymentMethodId, setPaymentMethodId] = useState('');
     const [categories, setCategories] = useState([]);
     const [paymentMethods, setPaymentMethods] = useState([]);
+    const [splitMode, setSplitMode] = useState('equally');
+    const [splitValues, setSplitValues] = useState({});
 
     const isEditing = !!expenseToEdit;
 
@@ -27,7 +29,7 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                 // Edit Mode: Pre-fill data
                 setDescription(expenseToEdit.description);
                 setAmount(expenseToEdit.amount);
-                setDate(new Date(expenseToEdit.date).toISOString().split('T')[0]);
+                setDate(new Date(new Date(expenseToEdit.date).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
 
                 // Set Payer
                 if (expenseToEdit.payerId) {
@@ -39,6 +41,13 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                 // Set Split Members
                 const splitIds = expenseToEdit.splits.map(s => s.userId ? s.userId._id : `guest:${s.guestName}`);
                 setSelectedMemberIds(splitIds);
+                setSplitMode('exact');
+                const initialValues = {};
+                expenseToEdit.splits.forEach(s => {
+                    const id = s.userId ? s.userId._id : `guest:${s.guestName}`;
+                    initialValues[id] = s.amount;
+                });
+                setSplitValues(initialValues);
             } else {
                 // Add Mode: Reset and Default
                 resetForm();
@@ -46,6 +55,8 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                 // Default select all
                 const allIds = group.members.map(m => getMemberId(m));
                 setSelectedMemberIds(allIds);
+                setSplitMode('equally');
+                setSplitValues({});
 
                 // Default pay
                 if (group.members.length > 0) {
@@ -111,7 +122,7 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
     const resetForm = () => {
         setDescription('');
         setAmount('');
-        setDate(new Date().toISOString().split('T')[0]);
+        setDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
     };
 
     if (!isOpen || !group) return null;
@@ -127,32 +138,88 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
         setLoading(true);
         try {
             const totalAmount = parseFloat(amount);
-            const splitCount = selectedMemberIds.length;
-            const splitAmount = parseFloat((totalAmount / splitCount).toFixed(2));
+            if (isNaN(totalAmount) || totalAmount <= 0) {
+                alert('Please enter a valid amount.');
+                setLoading(false);
+                return;
+            }
 
-            const splits = selectedMemberIds.map((memberId, index) => {
-                const isGuest = memberId.startsWith('guest:');
-                const id = isGuest ? null : memberId;
-                const guestName = isGuest ? memberId.split(':')[1] : null;
+            let finalSplits = [];
 
-                let splitAmountForMember = splitAmount;
-                if (index === selectedMemberIds.length - 1) {
-                    const assigned = splitAmount * (splitCount - 1);
-                    splitAmountForMember = parseFloat((totalAmount - assigned).toFixed(2));
+            if (splitMode === 'equally') {
+                const splitCount = selectedMemberIds.length;
+                const splitAmount = parseFloat((totalAmount / splitCount).toFixed(2));
+
+                finalSplits = selectedMemberIds.map((memberId, index) => {
+                    const isGuest = memberId.startsWith('guest:');
+                    const id = isGuest ? null : memberId;
+                    const guestName = isGuest ? memberId.split(':')[1] : null;
+
+                    let splitAmountForMember = splitAmount;
+                    if (index === selectedMemberIds.length - 1) {
+                        const assigned = splitAmount * (splitCount - 1);
+                        splitAmountForMember = parseFloat((totalAmount - assigned).toFixed(2));
+                    }
+
+                    return {
+                        userId: id,
+                        guestName: guestName,
+                        amount: splitAmountForMember
+                    };
+                });
+            } else if (splitMode === 'percentage') {
+                let totalPercent = 0;
+                selectedMemberIds.forEach(id => {
+                    totalPercent += parseFloat(splitValues[id] || 0);
+                });
+                if (Math.abs(totalPercent - 100) > 0.01) {
+                    alert('Total percentage must equal 100%');
+                    setLoading(false);
+                    return;
                 }
 
-                return {
-                    userId: id,
-                    guestName: guestName,
-                    amount: splitAmountForMember
-                };
-            });
+                let assignedAmount = 0;
+                finalSplits = selectedMemberIds.map((memberId, index) => {
+                    const isGuest = memberId.startsWith('guest:');
+                    const id = isGuest ? null : memberId;
+                    const guestName = isGuest ? memberId.split(':')[1] : null;
+
+                    const pct = parseFloat(splitValues[memberId] || 0);
+                    let splitAmountForMember = parseFloat(((totalAmount * pct) / 100).toFixed(2));
+
+                    if (index === selectedMemberIds.length - 1) {
+                        splitAmountForMember = parseFloat((totalAmount - assignedAmount).toFixed(2));
+                    } else {
+                        assignedAmount += splitAmountForMember;
+                    }
+
+                    return { userId: id, guestName, amount: splitAmountForMember };
+                });
+            } else if (splitMode === 'exact') {
+                let totalExact = 0;
+                selectedMemberIds.forEach(id => {
+                    totalExact += parseFloat(splitValues[id] || 0);
+                });
+                if (Math.abs(totalExact - totalAmount) > 0.01) {
+                    alert(`Total split amounts (${totalExact}) must equal the total expense amount (${totalAmount})`);
+                    setLoading(false);
+                    return;
+                }
+
+                finalSplits = selectedMemberIds.map((memberId) => {
+                    const isGuest = memberId.startsWith('guest:');
+                    const id = isGuest ? null : memberId;
+                    const guestName = isGuest ? memberId.split(':')[1] : null;
+
+                    return { userId: id, guestName, amount: parseFloat(splitValues[memberId] || 0) };
+                });
+            }
 
             const payload = {
                 description,
                 amount: totalAmount,
                 date,
-                splits
+                splits: finalSplits
             };
 
             // Payer Logic
@@ -278,6 +345,19 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                                 </button>
                             </div>
                         </div>
+                        
+                        <div className="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-xl mb-3">
+                            {['equally', 'percentage', 'exact'].map(mode => (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => setSplitMode(mode)}
+                                    className={`flex-1 py-1.5 text-xs font-bold capitalize rounded-lg transition-all cursor-pointer ${splitMode === mode ? 'bg-white dark:bg-slate-900 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                                >
+                                    {mode}
+                                </button>
+                            ))}
+                        </div>
                         <div className="bg-gray-50 dark:bg-slate-950 rounded-xl p-3 border border-gray-200 dark:border-slate-800 space-y-2 max-h-40 overflow-y-auto">
                             {group.members.map((member, idx) => {
                                 const id = getMemberId(member);
@@ -285,13 +365,33 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                                 const isSelected = selectedMemberIds.includes(id);
                                 return (
                                     <div key={idx}
-                                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors border ${isSelected ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-100 dark:border-indigo-900/50' : 'hover:bg-gray-100 dark:hover:bg-slate-900 border-transparent'}`}
-                                        onClick={() => handleToggleMember(id)}
+                                        className={`flex flex-col gap-2 p-2 rounded-lg transition-colors border ${isSelected ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-100 dark:border-indigo-900/50' : 'hover:bg-gray-100 dark:hover:bg-slate-900 border-transparent'}`}
                                     >
-                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900'}`}>
-                                            {isSelected && <Users size={12} className="text-white" />}
+                                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleToggleMember(id)}>
+                                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors flex-shrink-0 ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900'}`}>
+                                                {isSelected && <Users size={12} className="text-white" />}
+                                            </div>
+                                            <span className={`text-sm font-medium flex-1 ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400'}`}>{name}</span>
                                         </div>
-                                        <span className={`text-sm font-medium ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400'}`}>{name}</span>
+                                        
+                                        {isSelected && splitMode !== 'equally' && (
+                                            <div className="pl-8 pr-2 pb-1 animate-fade-in">
+                                                <div className="relative">
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">
+                                                        {splitMode === 'percentage' ? '%' : '₹'}
+                                                    </span>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-md focus:ring-1 focus:ring-indigo-500 outline-none text-sm text-gray-800 dark:text-gray-200"
+                                                        placeholder="0.00"
+                                                        value={splitValues[id] || ''}
+                                                        onChange={(e) => setSplitValues({...splitValues, [id]: e.target.value})}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -299,30 +399,31 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                     </div>
 
                     {!isEditing && isMeInvolved() && (
-                        <>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Your Category (private)</label>
-                                <CategoryDropdown
-                                    categories={categories}
-                                    value={category}
-                                    onChange={setCategory}
-                                    type="expense"
-                                    allowFavoriteToggle={false}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Payment Method (private)</label>
-                                <select
-                                    className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white transition-all"
-                                    value={paymentMethodId}
-                                    onChange={(e) => setPaymentMethodId(e.target.value)}
-                                >
-                                    {paymentMethods.map(pm => (
-                                        <option key={pm._id} value={pm._id} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">{pm.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Your Category (private)</label>
+                            <CategoryDropdown
+                                categories={categories}
+                                value={category}
+                                onChange={setCategory}
+                                type="expense"
+                                allowFavoriteToggle={false}
+                            />
+                        </div>
+                    )}
+                    
+                    {!isEditing && isPayerMe() && (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5">Payment Method (private)</label>
+                            <select
+                                className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white transition-all"
+                                value={paymentMethodId}
+                                onChange={(e) => setPaymentMethodId(e.target.value)}
+                            >
+                                {paymentMethods.map(pm => (
+                                    <option key={pm._id} value={pm._id} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white">{pm.name}</option>
+                                ))}
+                            </select>
+                        </div>
                     )}
 
                     {/* Date */}
@@ -331,7 +432,7 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
                         <div className="relative">
                             <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
                             <input
-                                type="date"
+                                type="datetime-local"
                                 required
                                 className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-950 outline-none transition-all text-gray-900 dark:text-white"
                                 value={date}
