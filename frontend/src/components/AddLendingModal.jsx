@@ -9,7 +9,7 @@ const AddLendingModal = ({ isOpen, onClose, onAdded }) => {
         amount: '',
         description: '',
         dueDate: '',
-        date: new Date().toISOString().split('T')[0]
+        date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]
     });
 
     const handleSubmit = async (e) => {
@@ -22,7 +22,7 @@ const AddLendingModal = ({ isOpen, onClose, onAdded }) => {
                 amount: '',
                 description: '',
                 dueDate: '',
-                date: new Date().toISOString().split('T')[0]
+                date: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]
             });
             onAdded();
             onClose();

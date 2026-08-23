@@ -177,11 +177,19 @@ const Notes = () => {
                                     <div className="flex gap-2">
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleDelete(note._id); }}
-                                            className="p-2 rounded-full transition-colors opacity-0 group-hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10"
+                                            className="p-2 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400"
                                             title="Delete"
                                             style={{ color: noteColorsConfig.textColor }}
                                         >
                                             <Trash2 size={16} />
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleOpenModal(note); }}
+                                            className="p-2 rounded-full transition-colors hover:bg-black/10 dark:hover:bg-white/10"
+                                            title="Edit"
+                                            style={{ color: noteColorsConfig.textColor }}
+                                        >
+                                            <Edit2 size={16} />
                                         </button>
                                     </div>
                                 </div>
@@ -198,15 +206,27 @@ const Notes = () => {
                         className={`rounded-2xl w-full max-w-lg shadow-2xl transform transition-all scale-100 relative flex flex-col my-8 min-h-[300px] ${modalColors.bgClass}`}
                         style={modalColors.bgStyle}
                     >
-                        {/* Modal Header Actions */}
                         <div className="flex justify-between items-center p-4">
-                            <button
-                                onClick={handleCloseModal}
-                                className="p-2 rounded-full transition-colors opacity-70 hover:opacity-100 cursor-pointer"
-                                style={{ color: modalColors.textColor }}
-                            >
-                                <X size={24} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleCloseModal}
+                                    className="p-2 rounded-full transition-colors opacity-70 hover:opacity-100 cursor-pointer"
+                                    style={{ color: modalColors.textColor }}
+                                >
+                                    <X size={24} />
+                                </button>
+                                {currentNote && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { handleCloseModal(); handleDelete(currentNote._id); }}
+                                        className="p-2 rounded-full transition-colors opacity-70 hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/30 cursor-pointer"
+                                        title="Delete note"
+                                        style={{ color: modalColors.textColor }}
+                                    >
+                                        <Trash2 size={20} />
+                                    </button>
+                                )}
+                            </div>
                             <button
                                 onClick={handleSubmit}
                                 className="px-5 py-2 rounded-lg font-bold text-sm transition-all shadow-sm flex items-center gap-2 cursor-pointer"
@@ -234,7 +254,6 @@ const Notes = () => {
                             <textarea
                                 ref={textareaRef}
                                 placeholder="Take a note..."
-                                required
                                 className="w-full flex-1 bg-transparent border-none focus:ring-0 focus:outline-none p-0 resize-none text-base placeholder-opacity-50"
                                 value={content}
                                 onChange={(e) => setContent(e.target.value)}

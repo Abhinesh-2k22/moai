@@ -43,7 +43,7 @@ const Settlements = () => {
                 api.get('/settlements/history')
             ]);
             setSettlements(settlementsRes.data);
-            
+
             // unkowing deleted document in settlement collection so to revert it i have inserted docs
             const excludedIds = [
                 '6a2e88d0a880835fe6a7553d',
@@ -52,7 +52,7 @@ const Settlements = () => {
             ];
             const filteredHistory = historyRes.data.filter(item => !excludedIds.includes(item._id));
             setHistory(filteredHistory);
-            
+
             setLoading(false);
         } catch (err) {
             console.error(err);
@@ -186,60 +186,60 @@ const Settlements = () => {
                             displayedSettlements.map(item => {
                                 const itemKey = item.userId || item.dummyId || item.name;
                                 return (
-                                <div key={itemKey} className="glass-card rounded-xl overflow-hidden group hover:shadow-md transition-all">
-                                    <div className="p-5 flex items-center justify-between cursor-pointer bg-white dark:bg-slate-900/40" onClick={() => toggleExpand(itemKey)}>
-                                        <div className="flex items-center gap-4">
-                                            <div className={`p-3 rounded-full ${activeTab === 'settle' ? 'bg-rose-100 dark:bg-rose-955/20 text-rose-600 dark:text-rose-400' : 'bg-emerald-100 dark:bg-emerald-955/20 text-emerald-600 dark:text-emerald-400'
-                                                }`}>
-                                                {activeTab === 'settle' ? <ArrowUpRight size={24} /> : <ArrowDownLeft size={24} />}
-                                            </div>
-                                            <div>
-                                                <h3 className="font-bold text-gray-800 dark:text-white text-lg">{item.name}</h3>
-                                                <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">Click to see breakdown</p>
-                                            </div>
-                                        </div>
-        
-                                        <div className="flex items-center gap-6">
-                                            <div className="text-right">
-                                                <p className={`text-xl font-bold ${activeTab === 'settle' ? 'text-rose-600' : 'text-emerald-600'
+                                    <div key={itemKey} className="glass-card rounded-xl overflow-hidden group hover:shadow-md transition-all">
+                                        <div className="p-5 flex items-center justify-between cursor-pointer bg-white dark:bg-slate-900/40" onClick={() => toggleExpand(itemKey)}>
+                                            <div className="flex items-center gap-4">
+                                                <div className={`p-3 rounded-full ${activeTab === 'settle' ? 'bg-rose-100 dark:bg-rose-955/20 text-rose-600 dark:text-rose-400' : 'bg-emerald-100 dark:bg-emerald-955/20 text-emerald-600 dark:text-emerald-400'
                                                     }`}>
-                                                    ₹{Math.abs(item.total).toFixed(2)}
-                                                </p>
-                                            </div>
-        
-                                            {/* Stop propagation to avoid toggling when clicking action */}
-                                            <div onClick={(e) => e.stopPropagation()}>
-                                                <button
-                                                    onClick={() => openSettleModal(item)}
-                                                    className={`p-3 rounded-full transition-all shadow-sm cursor-pointer ${activeTab === 'settle'
-                                                        ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-950/70'
-                                                        : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-950/70'}`}
-                                                    title="Settle All"
-                                                >
-                                                    <CheckCircle size={24} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-        
-                                    {/* Breakdown (Accordion) */}
-                                    {expandedUsers[itemKey] && (
-                                        <div className="bg-gray-50/50 dark:bg-slate-950/30 border-t border-gray-100 dark:border-slate-800 p-4 space-y-2 animate-fade-in">
-                                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 pl-1">Breakdown</p>
-                                            {item.breakdown.map((b, idx) => (
-                                                <div key={idx} className="flex justify-between items-center bg-white dark:bg-slate-900/40 p-3 rounded-lg border border-gray-100 dark:border-slate-800 shadow-sm">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`w-2 h-2 rounded-full ${b.amount > 0 ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
-                                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{b.groupName}</span>
-                                                    </div>
-                                                    <span className={`text-sm font-bold ${b.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                        {b.amount > 0 ? '+' : ''}₹{b.amount.toFixed(2)}
-                                                    </span>
+                                                    {activeTab === 'settle' ? <ArrowUpRight size={24} /> : <ArrowDownLeft size={24} />}
                                                 </div>
-                                            ))}
+                                                <div>
+                                                    <h3 className="font-bold text-gray-800 dark:text-white text-lg">{item.name}</h3>
+                                                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">Click to see breakdown</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-6">
+                                                <div className="text-right">
+                                                    <p className={`text-xl font-bold ${activeTab === 'settle' ? 'text-rose-600' : 'text-emerald-600'
+                                                        }`}>
+                                                        ₹{Math.abs(item.total).toFixed(2)}
+                                                    </p>
+                                                </div>
+
+                                                {/* Stop propagation to avoid toggling when clicking action */}
+                                                <div onClick={(e) => e.stopPropagation()}>
+                                                    <button
+                                                        onClick={() => openSettleModal(item)}
+                                                        className={`p-3 rounded-full transition-all shadow-sm cursor-pointer ${activeTab === 'settle'
+                                                            ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-950/70'
+                                                            : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-950/70'}`}
+                                                        title="Settle All"
+                                                    >
+                                                        <CheckCircle size={24} />
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
-                                    )}
-                                </div>
+
+                                        {/* Breakdown (Accordion) */}
+                                        {expandedUsers[itemKey] && (
+                                            <div className="bg-gray-50/50 dark:bg-slate-950/30 border-t border-gray-100 dark:border-slate-800 p-4 space-y-2 animate-fade-in">
+                                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 pl-1">Breakdown</p>
+                                                {item.breakdown.map((b, idx) => (
+                                                    <div key={idx} className="flex justify-between items-center bg-white dark:bg-slate-900/40 p-3 rounded-lg border border-gray-100 dark:border-slate-800 shadow-sm">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-2 h-2 rounded-full ${b.amount > 0 ? 'bg-emerald-400' : 'bg-rose-400'}`}></div>
+                                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{b.groupName}</span>
+                                                        </div>
+                                                        <span className={`text-sm font-bold ${b.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            {b.amount > 0 ? '+' : ''}₹{b.amount.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 );
                             })
                         )}
@@ -250,7 +250,7 @@ const Settlements = () => {
                                 {activeTab === 'settle' ? 'Debts You Paid' : 'Debts Paid To You'}
                             </h2>
                         </div>
-                        
+
                         <div className="space-y-4">
                             {(() => {
                                 const displayedHistory = history.filter(item => {
@@ -272,11 +272,11 @@ const Settlements = () => {
                                     const myId = (user?._id || user?.id)?.toString();
                                     const fromUserIdStr = item.fromUserId ? (item.fromUserId._id || item.fromUserId).toString() : null;
                                     const amIPayer = (fromUserIdStr && fromUserIdStr === myId) || (item.fromGuestName === user?.name);
-                                    
-                                    const otherPerson = amIPayer ? 
-                                        (item.toUserId ? item.toUserId.name : item.toGuestName) : 
+
+                                    const otherPerson = amIPayer ?
+                                        (item.toUserId ? item.toUserId.name : item.toGuestName) :
                                         (item.fromUserId ? item.fromUserId.name : item.fromGuestName);
-                                    
+
                                     return (
                                         <div key={item._id} className="glass-card rounded-xl overflow-hidden p-5 flex items-center justify-between bg-white dark:bg-slate-900/40 border border-gray-100 dark:border-slate-800">
                                             <div className="flex items-center gap-4">

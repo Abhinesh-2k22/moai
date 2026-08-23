@@ -16,7 +16,7 @@ exports.getUsers = async (req, res) => {
 
 exports.getDummyUsers = async (req, res) => {
     try {
-        const dummyUsers = await DummyUser.find({ 
+        const dummyUsers = await DummyUser.find({
             createdBy: req.user.id,
             isDeleted: { $ne: true }
         }).sort({ name: 1 });

@@ -1,32 +1,67 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { Landmark, ArrowRight } from 'lucide-react';
+import { Landmark, ArrowRight, ChevronDown, AlertTriangle, ShieldQuestion } from 'lucide-react';
+
+const PRESET_QUESTIONS = [
+    "What is your childhood nickname?",
+    "What is the name of your first pet?",
+    "What is the name of the street you grew up on?",
+    "What was your first car's model?",
+    "What is your mother's maiden name?",
+    "What was the name of your elementary school?",
+    "What city were you born in?",
+    "What is your oldest sibling's middle name?",
+    "Write my own question..."
+];
 
 const Register = () => {
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [selectedQuestion, setSelectedQuestion] = useState('');
+    const [customQuestion, setCustomQuestion] = useState('');
+    const [securityAnswer, setSecurityAnswer] = useState('');
     const { register } = useContext(AuthContext);
     const navigate = useNavigate();
     const [error, setError] = useState('');
 
+    const isCustom = selectedQuestion === "Write my own question...";
+    const effectiveQuestion = isCustom ? customQuestion.trim() : selectedQuestion;
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        if (!effectiveQuestion) {
+            setError('Please select or write a security question.');
+            return;
+        }
+
+        const answerWords = securityAnswer.trim().split(/\s+/);
+        if (answerWords.length > 1) {
+            setError('Security answer must be a single word.');
+            return;
+        }
+
+        if (!securityAnswer.trim()) {
+            setError('Please provide a security answer.');
+            return;
+        }
+
         try {
-            await register(name, email, password, username);
+            await register(name, email, password, username, effectiveQuestion, securityAnswer.trim());
             navigate('/');
         } catch (err) {
-            setError('Registration failed. Try again.');
+            setError(err.response?.data?.msg || 'Registration failed. Try again.');
         }
     };
 
     return (
         <div className="min-h-screen flex bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
             {/* Left Side - Form */}
-            <div className="w-full md:w-1/2 flex items-center justify-center p-8 animate-fade-in">
-                <div className="max-w-md w-full">
+            <div className="w-full md:w-1/2 flex items-center justify-center p-8 animate-fade-in overflow-y-auto">
+                <div className="max-w-md w-full py-8">
                     <div className="mb-8">
                         <div className="flex items-center gap-2 mb-2">
                             <div className="bg-indigo-600 p-2 rounded-lg text-white flex items-center justify-center">
@@ -45,6 +80,7 @@ const Register = () => {
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-5">
+                        {/* Name */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
                             <input
@@ -56,6 +92,8 @@ const Register = () => {
                                 required
                             />
                         </div>
+
+                        {/* Username */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
                             <input
@@ -67,6 +105,8 @@ const Register = () => {
                                 required
                             />
                         </div>
+
+                        {/* Email */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email address</label>
                             <input
@@ -78,6 +118,8 @@ const Register = () => {
                                 required
                             />
                         </div>
+
+                        {/* Password */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
                             <input
@@ -88,6 +130,79 @@ const Register = () => {
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
                             />
+                        </div>
+
+                        {/* Security Question divider */}
+                        <div className="border-t border-gray-200 dark:border-slate-800 pt-5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="bg-indigo-100 dark:bg-indigo-950/50 p-1.5 rounded-lg text-indigo-600 dark:text-indigo-400">
+                                    <ShieldQuestion size={16} />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold text-gray-800 dark:text-white">Security Question</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Used to recover your password if you forget it</p>
+                                </div>
+                            </div>
+
+                            {/* Question Selector */}
+                            <div className="space-y-3">
+                                <div className="relative">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Choose a question</label>
+                                    <select
+                                        className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white outline-none transition-all appearance-none pr-10 cursor-pointer"
+                                        value={selectedQuestion}
+                                        onChange={(e) => {
+                                            setSelectedQuestion(e.target.value);
+                                            if (e.target.value !== "Write my own question...") setCustomQuestion('');
+                                        }}
+                                        required
+                                    >
+                                        <option value="" disabled>Select a security question…</option>
+                                        {PRESET_QUESTIONS.map((q) => (
+                                            <option key={q} value={q}>{q}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown size={16} className="absolute right-3 top-[calc(50%+8px)] -translate-y-1/2 text-gray-400 pointer-events-none" />
+                                </div>
+
+                                {/* Custom question input */}
+                                {isCustom && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Your custom question</label>
+                                        <input
+                                            type="text"
+                                            className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white outline-none transition-all"
+                                            placeholder="e.g. What is your lucky number?"
+                                            value={customQuestion}
+                                            onChange={(e) => setCustomQuestion(e.target.value)}
+                                            required={isCustom}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Answer input */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Your answer
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 dark:text-white outline-none transition-all"
+                                        placeholder="One word only (e.g. Fluffy)"
+                                        value={securityAnswer}
+                                        onChange={(e) => setSecurityAnswer(e.target.value.replace(/\s/g, ''))}
+                                        required
+                                        autoComplete="off"
+                                    />
+                                    {/* Warning banner */}
+                                    <div className="flex items-start gap-2 mt-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-xl px-3 py-2.5">
+                                        <AlertTriangle size={14} className="text-amber-500 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                                        <p className="text-xs text-amber-700 dark:text-amber-300 font-medium leading-snug">
+                                            Use a <strong>single word</strong> you will always remember exactly — this is the only way to recover your password. The answer is case-insensitive.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <button
@@ -115,8 +230,6 @@ const Register = () => {
                 <div className="absolute inset-0 bg-gradient-to-br from-purple-700 to-indigo-600 opacity-90"></div>
                 <div className="absolute inset-0 flex items-center justify-center p-12 text-white z-10">
                     <div className="max-w-lg">
-
-
                         {/* Abstract Shapes */}
                         <div className="absolute top-1/4 left-10 w-64 h-64 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
                         <div className="absolute bottom-1/4 right-10 w-64 h-64 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
@@ -128,4 +241,3 @@ const Register = () => {
 };
 
 export default Register;
-

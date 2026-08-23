@@ -26,11 +26,11 @@ const UserSchema = new mongoose.Schema({
         },
         contentType: String
     },
-    resetOtp: {
+    securityQuestion: {
         type: String
     },
-    resetOtpExpires: {
-        type: Date
+    securityAnswer: {
+        type: String // Stored as SHA-256 hash
     },
     createdAt: {
         type: Date,

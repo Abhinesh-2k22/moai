@@ -2,7 +2,6 @@
 const User = require('../models/User');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const emailService = require('../utils/emailService');
 
 // Helper for simple hashing
 const hashPassword = (password) => {
@@ -11,7 +10,7 @@ const hashPassword = (password) => {
 
 // Register User
 exports.register = async (req, res) => {
-  const { name, email, password, username } = req.body;
+  const { name, email, password, username, securityQuestion, securityAnswer } = req.body;
 
   try {
     let user = await User.findOne({ $or: [{ email }, { username }] });
@@ -23,11 +22,18 @@ exports.register = async (req, res) => {
     // Simple SHA-256 hash (Fast, low CPU)
     const hashedPassword = hashPassword(password);
 
+    // Hash the security answer (lowercase + trimmed for consistency)
+    const hashedAnswer = securityAnswer
+      ? hashPassword(securityAnswer.trim().toLowerCase())
+      : undefined;
+
     user = new User({
       name,
       email,
       username,
-      password: hashedPassword
+      password: hashedPassword,
+      securityQuestion: securityQuestion || undefined,
+      securityAnswer: hashedAnswer
     });
 
     await user.save();
@@ -44,7 +50,17 @@ exports.register = async (req, res) => {
       { expiresIn: '30d' },
       (err, token) => {
         if (err) throw err;
-        res.json({ token, user: { id: user.id, name: user.name, email: user.email, profilePic: user.profilePic ? { contentType: user.profilePic.contentType } : undefined } });
+        res.json({
+          token,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            profilePic: user.profilePic ? { contentType: user.profilePic.contentType } : undefined,
+            hasSecurityQuestion: !!user.securityQuestion,
+            securityQuestion: user.securityQuestion || null
+          }
+        });
       }
     );
   } catch (err) {
@@ -81,7 +97,17 @@ exports.login = async (req, res) => {
       { expiresIn: '30d' },
       (err, token) => {
         if (err) throw err;
-        res.json({ token, user: { id: user.id, name: user.name, email: user.email, profilePic: user.profilePic ? { contentType: user.profilePic.contentType } : undefined } });
+        res.json({
+          token,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            profilePic: user.profilePic ? { contentType: user.profilePic.contentType } : undefined,
+            hasSecurityQuestion: !!user.securityQuestion,
+            securityQuestion: user.securityQuestion || null
+          }
+        });
       }
     );
   } catch (err) {
@@ -101,7 +127,7 @@ exports.getUsers = async (req, res) => {
   }
 };
 
-// Forgot Password
+// Forgot Password — returns the user's security question
 exports.forgotPassword = async (req, res) => {
   const { identifier } = req.body;
 
@@ -115,29 +141,22 @@ exports.forgotPassword = async (req, res) => {
       return res.status(404).json({ msg: 'User with this email or username does not exist' });
     }
 
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    if (!user.securityQuestion) {
+      return res.status(400).json({ msg: 'No security question set for this account. Please log in and set one from Profile Settings.' });
+    }
 
-    // Set OTP and expiration (10 minutes)
-    user.resetOtp = otp;
-    user.resetOtpExpires = Date.now() + 10 * 60 * 1000;
-    await user.save();
-
-    // Send OTP
-    await emailService.sendOtpEmail(user.email, otp);
-
-    res.json({ msg: 'OTP sent successfully to registered email address' });
+    res.json({ securityQuestion: user.securityQuestion });
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server error');
   }
 };
 
-// Reset Password
+// Reset Password — verifies security answer then sets new password
 exports.resetPassword = async (req, res) => {
-  const { identifier, otp, newPassword } = req.body;
+  const { identifier, securityAnswer, newPassword } = req.body;
 
-  if (!identifier || !otp || !newPassword) {
+  if (!identifier || !securityAnswer || !newPassword) {
     return res.status(400).json({ msg: 'Please enter all fields' });
   }
 
@@ -147,17 +166,18 @@ exports.resetPassword = async (req, res) => {
       return res.status(404).json({ msg: 'User does not exist' });
     }
 
-    // Check OTP and expiration
-    if (!user.resetOtp || user.resetOtp !== otp || !user.resetOtpExpires || user.resetOtpExpires < Date.now()) {
-      return res.status(400).json({ msg: 'Invalid or expired OTP' });
+    if (!user.securityQuestion || !user.securityAnswer) {
+      return res.status(400).json({ msg: 'No security question set for this account' });
     }
 
-    // Hash the new password
-    const hashedPassword = hashPassword(newPassword);
+    // Hash the provided answer and compare
+    const hashedAnswer = hashPassword(securityAnswer.trim().toLowerCase());
+    if (hashedAnswer !== user.securityAnswer) {
+      return res.status(400).json({ msg: 'Incorrect answer. Please try again.' });
+    }
 
-    user.password = hashedPassword;
-    user.resetOtp = undefined;
-    user.resetOtpExpires = undefined;
+    // Hash the new password and save
+    user.password = hashPassword(newPassword);
     await user.save();
 
     res.json({ msg: 'Password reset successful. You can now log in.' });
@@ -167,3 +187,62 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
+// Set / Update Security Question (protected — requires login)
+exports.setSecurityQuestion = async (req, res) => {
+  const { securityQuestion, securityAnswer } = req.body;
+
+  if (!securityQuestion || !securityAnswer) {
+    return res.status(400).json({ msg: 'Please provide both a security question and answer' });
+  }
+
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+
+    user.securityQuestion = securityQuestion.trim();
+    user.securityAnswer = hashPassword(securityAnswer.trim().toLowerCase());
+    await user.save();
+
+    res.json({ msg: 'Security question updated successfully', hasSecurityQuestion: true, securityQuestion: user.securityQuestion });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+};
+
+// Change Password (protected — requires login, verified by security answer)
+exports.changePassword = async (req, res) => {
+  const { securityAnswer, newPassword } = req.body;
+
+  if (!securityAnswer || !newPassword) {
+    return res.status(400).json({ msg: 'Please provide your security answer and a new password' });
+  }
+
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+
+    if (!user.securityQuestion || !user.securityAnswer) {
+      return res.status(400).json({ msg: 'No security question set for this account. Please set one first.' });
+    }
+
+    // Verify the security answer
+    const hashedAnswer = hashPassword(securityAnswer.trim().toLowerCase());
+    if (hashedAnswer !== user.securityAnswer) {
+      return res.status(400).json({ msg: 'Incorrect security answer. Please try again.' });
+    }
+
+    // Hash and save new password
+    user.password = hashPassword(newPassword);
+    await user.save();
+
+    res.json({ msg: 'Password changed successfully.' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+};
