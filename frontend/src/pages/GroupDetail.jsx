@@ -36,6 +36,7 @@ const GroupDetail = () => {
     const [settleData, setSettleData] = useState(null);
     const [settlePaymentMethodId, setSettlePaymentMethodId] = useState('');
     const [paymentMethods, setPaymentMethods] = useState([]);
+    const [isSettleLoading, setIsSettleLoading] = useState(false);
 
     // Date and Sort Filters
     const [startDate, setStartDate] = useState('');
@@ -167,6 +168,8 @@ const GroupDetail = () => {
 
     const executeSettleUp = async () => {
         if (!settleData) return;
+        if (isSettleLoading) return;
+        setIsSettleLoading(true);
         const { otherUserId, otherGuestName, amount, theyPaidMe } = settleData;
 
         try {
@@ -192,6 +195,8 @@ const GroupDetail = () => {
             setSettleData(null);
         } catch (err) {
             alert(err.response?.data?.msg || 'Failed to record settlement');
+        } finally {
+            setIsSettleLoading(false);
         }
     };
 
@@ -422,7 +427,7 @@ const GroupDetail = () => {
                                 const member = group.members.find(m =>
                                     m.guestName && m.guestName.toLowerCase() === guestKey
                                 );
-                                name = member ? getMemberLabel(member, user.id) : guestKey;
+                                name = member ? getMemberLabel(m, user.id) : guestKey;
                                 toGuestName = member?.guestName || guestKey;
                             } else {
                                 const member = group.members.find(m => m.userId && m.userId._id === b.key);
@@ -770,7 +775,7 @@ const GroupDetail = () => {
                 paymentMethods={paymentMethods}
                 paymentMethodId={settlePaymentMethodId}
                 setPaymentMethodId={setSettlePaymentMethodId}
-                loading={false}
+                loading={isSettleLoading}
             />
         </div>
     );

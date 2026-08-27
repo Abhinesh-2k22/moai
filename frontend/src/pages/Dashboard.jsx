@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import api from '../api/axios';
 import { AuthContext } from '../context/AuthContext';
 import AddTransactionModal from '../components/AddTransactionModal';
-import { Plus, TrendingUp, TrendingDown, DollarSign, Trash2, Calendar, Tag, Wallet, Clock } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, Trash2, Calendar, Tag, Wallet, Clock, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 
 const Dashboard = () => {
@@ -17,6 +17,7 @@ const Dashboard = () => {
         borrow: 0
     });
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingTransaction, setEditingTransaction] = useState(null);
 
     useEffect(() => {
         fetchData();
@@ -125,7 +126,7 @@ const Dashboard = () => {
                     <p className="text-gray-500 dark:text-gray-400 mt-1">Welcome back, {user?.name}!</p>
                 </div>
                 <button
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={() => { setEditingTransaction(null); setIsModalOpen(true); }}
                     className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 md:px-6 md:py-3 text-sm md:text-base rounded-xl transition-all shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-1 cursor-pointer"
                 >
                     <Plus size={20} />
@@ -282,7 +283,14 @@ const Dashboard = () => {
                                                 }`}>
                                                 {tx.type === 'income' || (tx.type === 'investment' && tx.investmentType === 'sell') || tx.type === 'borrow' ? '+' : '-'}₹{tx.amount.toFixed(2)}
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            <td className="px-6 py-4 whitespace-nowrap text-center flex justify-center gap-2">
+                                                <button
+                                                    onClick={() => { setEditingTransaction(tx); setIsModalOpen(true); }}
+                                                    className="p-2 text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-all cursor-pointer"
+                                                    title="Edit Transaction"
+                                                >
+                                                    <Pencil size={18} />
+                                                </button>
                                                 <button
                                                     onClick={() => handleDelete(tx._id)}
                                                     className="p-2 text-gray-400 dark:text-gray-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-all cursor-pointer"
@@ -301,9 +309,10 @@ const Dashboard = () => {
 
             <AddTransactionModal
                 isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
+                onClose={() => { setIsModalOpen(false); setEditingTransaction(null); }}
                 onTransactionAdded={fetchData}
                 recentCategories={[...new Set(transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).map(t => t.category))].slice(0, 5)}
+                transactionToEdit={editingTransaction}
             />
         </div>
     );

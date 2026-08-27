@@ -132,6 +132,46 @@ exports.addTransaction = async (req, res) => {
     }
 };
 
+exports.updateTransaction = async (req, res) => {
+    try {
+        const { amount, type, category, description, date, investmentType, paymentMethodId, paymentMethodName } = req.body;
+        const transaction = await Transaction.findById(req.params.id);
+
+        if (!transaction) {
+            return res.status(404).json({ msg: 'Transaction not found' });
+        }
+
+        if (transaction.userId.toString() !== req.user.id) {
+            return res.status(401).json({ msg: 'Not authorized' });
+        }
+
+        transaction.amount = amount || transaction.amount;
+        transaction.type = type || transaction.type;
+        transaction.category = category || transaction.category;
+        if (description !== undefined) transaction.description = description;
+        if (date) transaction.date = date;
+        if (investmentType) transaction.investmentType = investmentType;
+        if (paymentMethodId) transaction.paymentMethodId = paymentMethodId;
+        if (paymentMethodName) transaction.paymentMethodName = paymentMethodName;
+
+        await transaction.save();
+
+        if (transaction.linkedTransactionId) {
+            const linkedTx = await Transaction.findById(transaction.linkedTransactionId);
+            if (linkedTx) {
+                linkedTx.amount = transaction.amount;
+                linkedTx.date = transaction.date;
+                await linkedTx.save();
+            }
+        }
+
+        res.json(transaction);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+};
+
 exports.settleTransaction = async (req, res) => {
     try {
         const { paymentMethodId, paymentMethodName } = req.body || {};

@@ -129,6 +129,7 @@ const AddGroupExpenseModal = ({ isOpen, onClose, group, onExpenseAdded, expenseT
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (loading) return;
 
         if (selectedMemberIds.length === 0) {
             alert('Please select at least one person to split with.');

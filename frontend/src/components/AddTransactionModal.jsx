@@ -4,7 +4,7 @@ import { X, Check } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 import CategoryDropdown from './CategoryDropdown';
 
-const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCategories = [] }) => {
+const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCategories = [], transactionToEdit = null }) => {
     const { user } = useContext(AuthContext);
     const [amount, setAmount] = useState('');
     const [type, setType] = useState('expense');
@@ -16,7 +16,7 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
         return now.toISOString().slice(0, 16);
     });
 
-
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [categories, setCategories] = useState([]);
     const [newCategory, setNewCategory] = useState('');
@@ -42,6 +42,26 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
             }
         }
     }, [isOpen, type]);
+
+    useEffect(() => {
+        if (isOpen && transactionToEdit) {
+            setAmount(transactionToEdit.amount);
+            setType(transactionToEdit.type);
+            setCategory(transactionToEdit.category || '');
+            setDescription(transactionToEdit.description || '');
+            if (transactionToEdit.date) {
+                setDate(new Date(new Date(transactionToEdit.date).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+            }
+            if (transactionToEdit.investmentType) {
+                setInvestmentType(transactionToEdit.investmentType);
+            }
+            if (transactionToEdit.paymentMethodId) {
+                setPaymentMethodId(transactionToEdit.paymentMethodId._id || transactionToEdit.paymentMethodId);
+            }
+        } else if (isOpen && !transactionToEdit) {
+            resetForm();
+        }
+    }, [isOpen, transactionToEdit]);
 
     const fetchCategories = async () => {
         try {
@@ -105,6 +125,8 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (isSubmitting) return;
+        setIsSubmitting(true);
         try {
             const payload = {
                 amount: Number(amount),
@@ -184,13 +206,19 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
                 payload.paymentMethodName = pm?.name || 'Unspecified';
             }
 
-            await api.post('/transactions', payload);
+            if (transactionToEdit) {
+                await api.put(`/transactions/${transactionToEdit._id}`, payload);
+            } else {
+                await api.post('/transactions', payload);
+            }
             onTransactionAdded();
             onClose();
             resetForm();
         } catch (err) {
             console.error(err);
-            alert('Failed to add transaction');
+            alert('Failed to add/update transaction');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -230,7 +258,7 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4">
             <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl transform transition-all scale-100 max-h-[90vh] overflow-y-auto border border-gray-100 dark:border-slate-800/80">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Add Transaction</h2>
+                    <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{transactionToEdit ? 'Edit Transaction' : 'Add Transaction'}</h2>
                     <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors text-gray-500 dark:text-gray-450 cursor-pointer">
                         <X size={24} />
                     </button>
@@ -458,9 +486,10 @@ const AddTransactionModal = ({ isOpen, onClose, onTransactionAdded, recentCatego
 
                     <button
                         type="submit"
-                        className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 dark:shadow-none mt-2 cursor-pointer"
+                        disabled={isSubmitting}
+                        className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/30 dark:shadow-none mt-2 cursor-pointer disabled:opacity-50"
                     >
-                        Save Transaction
+                        {isSubmitting ? 'Saving...' : (transactionToEdit ? 'Update Transaction' : 'Save Transaction')}
                     </button>
                 </form>
             </div>

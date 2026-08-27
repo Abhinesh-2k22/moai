@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 
 router.get('/', auth, transactionController.getTransactions);
 router.post('/', auth, transactionController.addTransaction);
+router.put('/:id', auth, transactionController.updateTransaction);
 router.delete('/:id', auth, transactionController.deleteTransaction);
 router.put('/:id/settle', auth, transactionController.settleTransaction);
 router.get('/analysis', auth, transactionController.getAnalysis);
