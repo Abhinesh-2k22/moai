@@ -39,6 +39,7 @@ const Analysis = () => {
     const [paymentMethods, setPaymentMethods] = useState([]);
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
     const [selectedTxIds, setSelectedTxIds] = useState([]);
+    const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
 
     useEffect(() => {
         fetchData();
@@ -123,6 +124,29 @@ const Analysis = () => {
             );
         }
 
+        // Apply Sorting
+        result = [...result].sort((a, b) => {
+            if (sortConfig.key === 'date') {
+                return sortConfig.direction === 'asc' 
+                    ? new Date(a.date) - new Date(b.date)
+                    : new Date(b.date) - new Date(a.date);
+            }
+            if (sortConfig.key === 'amount') {
+                return sortConfig.direction === 'asc' ? a.amount - b.amount : b.amount - a.amount;
+            }
+            if (sortConfig.key === 'category') {
+                return sortConfig.direction === 'asc' 
+                    ? a.category.localeCompare(b.category)
+                    : b.category.localeCompare(a.category);
+            }
+            if (sortConfig.key === 'type') {
+                return sortConfig.direction === 'asc' 
+                    ? a.type.localeCompare(b.type)
+                    : b.type.localeCompare(a.type);
+            }
+            return 0;
+        });
+
         setFilteredTransactions(result);
         setSelectedTxIds(result.map(tx => tx._id));
     };
@@ -130,7 +154,7 @@ const Analysis = () => {
     // Re-run filters when filter state changes
     useEffect(() => {
         applyFilters();
-    }, [searchTerm, typeFilter, categoryFilter, paymentMethodFilter, groupFilter, dateRange]);
+    }, [searchTerm, typeFilter, categoryFilter, paymentMethodFilter, groupFilter, dateRange, sortConfig, transactions]);
 
 
     function calculateTotals() {
@@ -1019,6 +1043,21 @@ const Analysis = () => {
                             )}
                         </div>
                         <div className="flex items-center gap-4 text-sm font-medium whitespace-nowrap">
+                            <select
+                                value={`${sortConfig.key}-${sortConfig.direction}`}
+                                onChange={(e) => {
+                                    const [key, direction] = e.target.value.split('-');
+                                    setSortConfig({ key, direction });
+                                }}
+                                className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-700 dark:text-gray-300 rounded-lg outline-none cursor-pointer"
+                            >
+                                <option value="date-desc">Date (Newest first)</option>
+                                <option value="date-asc">Date (Oldest first)</option>
+                                <option value="amount-desc">Amount (High to Low)</option>
+                                <option value="amount-asc">Amount (Low to High)</option>
+                                <option value="category-asc">Category (A-Z)</option>
+                                <option value="type-asc">Type (A-Z)</option>
+                            </select>
                             <div className="text-gray-500 dark:text-gray-400">
                                 Showing {filteredTransactions.length} transactions
                             </div>

@@ -43,8 +43,9 @@ const GroupDetail = () => {
     const [endDate, setEndDate] = useState('');
     const [filterPaidBy, setFilterPaidBy] = useState('');
     const [filterSplitWith, setFilterSplitWith] = useState('');
+    const [sortBy, setSortBy] = useState('date-desc');
 
-    const filteredExpenses = expenses.filter(exp => {
+    let filteredExpenses = expenses.filter(exp => {
         let matchPaidBy = true;
         let matchSplitWith = true;
 
@@ -63,6 +64,19 @@ const GroupDetail = () => {
         }
 
         return matchPaidBy && matchSplitWith;
+    });
+
+    filteredExpenses.sort((a, b) => {
+        if (sortBy === 'date-desc') {
+            return new Date(b.date) - new Date(a.date);
+        } else if (sortBy === 'date-asc') {
+            return new Date(a.date) - new Date(b.date);
+        } else if (sortBy === 'amount-desc') {
+            return b.amount - a.amount;
+        } else if (sortBy === 'amount-asc') {
+            return a.amount - b.amount;
+        }
+        return 0;
     });
 
     useEffect(() => {
@@ -527,6 +541,16 @@ const GroupDetail = () => {
                                 />
                             </div>
                             <div className="flex items-center gap-2">
+                                <select 
+                                    className="text-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value)}
+                                >
+                                    <option value="date-desc">Date (Newest)</option>
+                                    <option value="date-asc">Date (Oldest)</option>
+                                    <option value="amount-desc">Amount (High to Low)</option>
+                                    <option value="amount-asc">Amount (Low to High)</option>
+                                </select>
                                 <select 
                                     className="text-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
                                     value={filterPaidBy}
